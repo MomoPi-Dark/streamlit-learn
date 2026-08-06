@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 from lib.paths import ULASAN_LABELED_CSV_PATH, ULASAN_RAW_CSV_PATH, SLANG_CSV_PATH, CSV_DIR
-from lib.enum import StateKey, StageKey
+from lib.enum import StateKey, StageKey, set_session_state
 from lib.config import REQUIRED_COLUMNS, required_columns
 from structures.base import BasePage, Options
 
@@ -15,19 +15,19 @@ from structures.base import BasePage, Options
 )
 class AppPage(BasePage):
     def on_start(self) -> None:
-        st.session_state[StageKey.STAGE_2] = False
+        set_session_state(StageKey.STAGE_2, False)
            
-        if self._render_warning():
+        if self._validate_requirements():
             return   
-            
+        
         if not ULASAN_LABELED_CSV_PATH.exists():
             return
-
-        st.session_state[StageKey.STAGE_2] = True
+            
+        set_session_state(StageKey.STAGE_2, True)
            
     
     def run(self) -> None:
-        warning = self._render_warning()
+        warning = self._validate_requirements()
         
         st.title("🏷️ Pelabelan Data")
         st.caption(
@@ -57,9 +57,9 @@ class AppPage(BasePage):
         
         st.markdown("---")
         
-        if self._render_warning():
-            st.error("Dataset belum siap.")
-            return
+        if self._validate_requirements():
+            st.error("🚫 Data belum siap. Selesaikan persyaratan di atas terlebih dahulu sebelum melanjutkan ke Labeling.")
+            st.stop()
 
         if ULASAN_LABELED_CSV_PATH.exists():
             self._render_existing_dataset()
@@ -112,6 +112,8 @@ class AppPage(BasePage):
             self._render_labeling()
             
     def _render_labeling(self) -> None:
+        warning = self._validate_requirements() 
+        
         df_raw = pd.read_csv(ULASAN_RAW_CSV_PATH)
 
         if not self._validate_columns(
@@ -134,7 +136,7 @@ class AppPage(BasePage):
             "🏷️ Mulai Pelabelan",
             type="primary",
             width="stretch",
-            disabled= not st.session_state[StageKey.STAGE_1]
+            disabled=bool(warning),
         ):
             df = self._label_dataset(df_raw)
 
@@ -209,15 +211,12 @@ class AppPage(BasePage):
 
         return True
     
-    def _render_warning(self) -> list[str] | None:
+    def _validate_requirements(self) -> list[str] | None:
         errors: list[str] = []
         
         # Dataset
         if not ULASAN_RAW_CSV_PATH.exists():
             errors.append("📄 Dataset belum tersedia. Silakan lakukan scraping atau upload dataset.")
-        elif not st.session_state[StageKey.STAGE_1_DATASET]:
-            errors.append("📄 Dataset belum valid. Silakan periksa kembali halaman Dataset.")
-            
         else:
             try:
                 df = pd.read_csv(ULASAN_RAW_CSV_PATH, nrows=5)

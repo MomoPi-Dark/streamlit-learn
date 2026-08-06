@@ -25,9 +25,19 @@ CATEGORY_CONFIG: dict[str, CategoryConfig] = {
         description="Membersihkan, menormalisasi, dan mempersiapkan teks."
     ),
 
-    "model": CategoryConfig(
-        name="Model",
-        description="Mengelola model, TF-IDF, dan konfigurasi pembelajaran."
+    "tf-idf": CategoryConfig(
+        name="TF-IDF",
+        description="Mengubah hasil preprocessing menjadi representasi numerik untuk pembobotan kata.",
+    ),
+    
+    "spliting": CategoryConfig(
+        name="Data Splitting",
+        description="Membagi data serta menyeimbangkan kelas sebelum pelatihan model.",
+    ),
+
+    "modeling": CategoryConfig(
+        name="Modeling",
+        description="Membagi data serta melatih dan mengevaluasi model klasifikasi."
     ),
 
     "training": CategoryConfig(

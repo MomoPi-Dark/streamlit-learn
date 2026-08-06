@@ -5,7 +5,7 @@ import random
 from datetime import datetime
 from google_play_scraper import reviews, Sort
 from lib.enum import StateKey, StageKey, StageCollect
-from lib.paths import ULASAN_RAW_CSV_PATH, CSV_DIR
+from lib.paths import ULASAN_RAW_CSV_PATH, CSV_DIR, clear_downstream_artifacts
 from lib.config import REQUIRED_COLUMNS, required_columns
 from structures.base import BasePage, Options
 from lib.enum import set_session_state, get_session_state
@@ -22,19 +22,22 @@ APP_ID = "com.hottagames.nte"
 )
 class AppPage(BasePage):
     def on_start(self) -> None:
-        set_session_state(StageKey.STAGE_1, False)
         set_session_state(StageKey.STAGE_1_DATASET, False)
         
-        if self._render_warning():
+        if self._validate_requirements():
             return
         
         with open(ULASAN_RAW_CSV_PATH, encoding="utf-8") as f:
             st.session_state[StageCollect.DATASET_COUNT] = sum(1 for _ in f) - 1
             
         set_session_state(StageKey.STAGE_1_DATASET, True)
-        set_session_state(StageKey.STAGE_1, True)
+        
+        if get_session_state(StageKey.STAGE_1_SLANG):
+            set_session_state(StageKey.STAGE_1, True)
         
     def run(self) -> None:
+        warning = self._validate_requirements()
+        
         st.title("📥 Pengumpulan Dataset")
         st.write(f"Ambil ulasan dari Google Play Store untuk aplikasi `{APP_ID}`.")
         st.info(
@@ -51,14 +54,15 @@ class AppPage(BasePage):
         st.markdown("---")  
         
 
-        if self._render_warning():
-            self._render_existing_dataset()
-        else:
+        if warning:
             st.error("Belum ada dataset tersimpan.")
             st.markdown("---")
             
             self._render_upload_dataset(force=True)
             self._render_scrape_form(force=False)
+        else:
+            self._render_existing_dataset()
+        
             
     def _render_existing_dataset(self) -> None:
         df_existing = pd.read_csv(ULASAN_RAW_CSV_PATH)
@@ -96,7 +100,11 @@ class AppPage(BasePage):
     def _render_scrape_form(self, force: bool) -> None:
         with st.expander("🔄 Scraping Ulang (timpa data lama)"):
             if force:
-                st.warning("Data lama akan tertimpa jika melakukan scraping ulang.")
+                st.warning(
+                    "Data lama akan tertimpa jika melakukan scraping ulang. "
+                    "Seluruh hasil labeling, preprocessing, TF-IDF, dan Train-Test Split "
+                    "yang sudah ada juga akan **dihapus** karena tidak lagi sesuai dengan dataset baru."
+                )
             
             count = st.number_input(
                 "Jumlah ulasan yang diambil",
@@ -181,6 +189,10 @@ class AppPage(BasePage):
                 CSV_DIR.mkdir(parents=True, exist_ok=True)
                 df_raw.to_csv(ULASAN_RAW_CSV_PATH, index=False)
 
+                # Dataset mentah berubah -> semua hasil olahan lama (labeling,
+                # preprocessing, TF-IDF, split) sudah tidak valid dan harus dihapus.
+                clear_downstream_artifacts()
+
                 st.success(f"✅ Berhasil mengumpulkan {len(df_raw)} ulasan.")
 
                 st.dataframe(
@@ -203,7 +215,11 @@ class AppPage(BasePage):
     def _render_upload_dataset(self, force: bool) -> None:
         with st.expander("📤 Upload Dataset"):
             if force:
-                st.warning("Data lama akan tertimpa jika melakukan scraping ulang.")
+                st.warning(
+                    "Data lama akan tertimpa jika mengunggah dataset baru. "
+                    "Seluruh hasil labeling, preprocessing, TF-IDF, dan Train-Test Split "
+                    "yang sudah ada juga akan **dihapus** karena tidak lagi sesuai dengan dataset baru."
+                )
             
             df = None
             
@@ -263,6 +279,10 @@ class AppPage(BasePage):
 
                 CSV_DIR.mkdir(parents=True, exist_ok=True)
                 df.to_csv(ULASAN_RAW_CSV_PATH, index=False)
+
+                # Dataset mentah berubah -> semua hasil olahan lama (labeling,
+                # preprocessing, TF-IDF, split) sudah tidak valid dan harus dihapus.
+                clear_downstream_artifacts()
 
                 st.success("✅ Dataset berhasil disimpan.")
 
@@ -352,7 +372,7 @@ class AppPage(BasePage):
 
         return df.iloc[:count].reset_index(drop=True)
     
-    def _render_warning(self) -> list[str] | None:
+    def _validate_requirements(self) -> list[str] | None:
         warnings: list[str] = []
 
         if not ULASAN_RAW_CSV_PATH.exists():

@@ -18,6 +18,7 @@ class StageKey(str, Enum):
     STAGE_6 = "stage_6"
     STAGE_7 = "stage_7"
     STAGE_8 = "stage_8"
+    STAGE_9 = "stage_9"
 
 
 class StageCollect(str, Enum):
@@ -33,6 +34,7 @@ DEFAULT_SESSION_STATE = {
     StageKey.STAGE_1: False,
     StageKey.STAGE_1_DATASET: False,
     StageKey.STAGE_1_SLANG: False,
+    
     StageKey.STAGE_2: False,
     StageKey.STAGE_3: False,
     StageKey.STAGE_4: False,
@@ -40,6 +42,7 @@ DEFAULT_SESSION_STATE = {
     StageKey.STAGE_6: False,
     StageKey.STAGE_7: False,
     StageKey.STAGE_8: False,
+    StageKey.STAGE_9: False,
 
     # Stage Collect
     StageCollect.DATASET_COUNT: 0,
@@ -51,9 +54,9 @@ def load_session_state() -> None:
     for key, value in DEFAULT_SESSION_STATE.items():
         st.session_state.setdefault(key, value)
         
-def get_session_state(key: str | Enum, default: Any = None) -> Any:
+def get_session_state(key: str | Enum) -> Any:
     session_key: str = key.value if isinstance(key, Enum) else key
-    return st.session_state.get(session_key, default)
+    return st.session_state.get(session_key)
 
 def set_session_state(key: str | Enum, value: Any) -> None:
     session_key = key.value if isinstance(key, Enum) else key

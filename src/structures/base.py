@@ -61,3 +61,4 @@ class BasePage(ABC):
         
     def __call__(self) -> None:
         self.on_start()
+        self.run()

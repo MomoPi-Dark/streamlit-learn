@@ -7,7 +7,7 @@ import os
 import importlib.util
 from pathlib import Path
 from typing import Any, Optional, cast
-from lib.enum import StateKey,StageKey
+from lib.enum import StateKey,StageKey, get_session_state
 from lib.loader import PageLoader
 from structures.base import BasePage
 from lib.category_config import CategoryConfig, CATEGORY_CONFIG
@@ -248,30 +248,29 @@ def main():
         pipeline_steps = [
             ("1. Pengumpulan Data", StageKey.STAGE_1, "/app-dataset"),
             ("2. Pelabelan Data", StageKey.STAGE_2, "/app-labeling"),
-            ("3. Preprocessing", StageKey.STAGE_3, ""),
-            ("4. Pembobotan TF-IDF", StageKey.STAGE_4, ""),
-            ("5. Train-Test Split", StageKey.STAGE_5, ""),
-            ("6. Training Model", StageKey.STAGE_6, ""),
-            ("7. Evaluasi Model", StageKey.STAGE_7, ""),
-            ("8. Visualisasi", StageKey.STAGE_8, ""),
+            ("3. Preprocessing", StageKey.STAGE_3, "/app-preprocessing"),
+            ("4. Pembobotan TF-IDF", StageKey.STAGE_4, "/app-tfidf"),
+            ("5. Train-Test Split", StageKey.STAGE_5, "/app-splitdata"),
+            ("6. Penyeimbangan Kelas (SMOTE)", StageKey.STAGE_6, "/app-smoote"),
+            ("7. Training Model", StageKey.STAGE_7, "/app-naifbayes"),
+            ("8. Evaluasi Model", StageKey.STAGE_8, "/app-evaluation"),
+            ("9. Visualisasi", StageKey.STAGE_9, "/app-visualisasi"),
         ]
 
-        all_done = True
         for label, key, link in pipeline_steps:
-            done = bool(st.session_state.get(key, False))
-            all_done &= done
+            done = bool(get_session_state(key))
 
             target_page = find_page_by_url(st_pages, link)
             icon = "✅" if done else "⬜"
 
-            if target_page is not None:
+            if target_page:
                 st.page_link(
                     target_page,
                     label=f"{icon} {label}",
                     width="stretch",
                 )
             else:
-                st.markdown(f"&nbsp;&nbsp;{icon} {label}")
+                st.markdown(f"&nbsp;&nbsp;{icon} {label}", unsafe_allow_html=True)
         
     st.sidebar.markdown(
         '<div class="sidebar-divider"></div>',

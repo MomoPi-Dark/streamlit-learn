@@ -24,33 +24,15 @@ required_columns = set(REQUIRED_COLUMNS)
 )
 class AppPage(BasePage):
     def on_start(self) -> None:
-        set_session_state(StageKey.STAGE_1, False)
         set_session_state(StageKey.STAGE_1_SLANG, False)
 
-        if not SLANG_CSV_PATH.exists():
+        if self._validate_requirements():
             return
-
-        try:
-            df = pd.read_csv(SLANG_CSV_PATH, nrows=5)
-        except Exception:
-            st.error("Dataset tidak dapat dibaca. Silakan lakukan scraping ulang.")
-            return
-
-        missing = required_columns - set(df.columns)
-
-        if missing:
-            st.error(
-                "Format dataset tidak sesuai.\n"
-                f"Kolom yang wajib ada: {', '.join(REQUIRED_COLUMNS)}\n"
-                f"Kolom yang hilang: {', '.join(sorted(missing))}"
-            )
-            return
-
-        set_session_state(StageKey.STAGE_1_SLANG, True)
-
-        if get_session_state(StageKey.STAGE_1_DATASET, False):
-            set_session_state(StageKey.STAGE_1, True)
     
+        set_session_state(StageKey.STAGE_1_SLANG, True)
+        if get_session_state(StageKey.STAGE_1_DATASET):
+            set_session_state(StageKey.STAGE_1, True)
+
     def run(self) -> None:
         st.title("📚 Kamus Normalisasi Kata Slang")
         st.write(
@@ -130,3 +112,29 @@ class AppPage(BasePage):
             st.rerun()
         except Exception as e:
             st.error(f"Gagal mengunduh kamus slang: {e}")
+
+    def _validate_requirements(self) -> list[str] | None:
+        warnings: list[str] = []
+
+        if not SLANG_CSV_PATH.exists():
+            warnings.append("📄 Dataset belum tersedia.")
+            return warnings
+
+        try:
+            df = pd.read_csv(SLANG_CSV_PATH, nrows=5)
+        except Exception:
+            warnings.append("📄 Dataset tidak dapat dibaca. Silakan lakukan scraping ulang.")
+            return warnings
+
+        missing = required_columns - set(df.columns)
+
+        if missing:
+            warnings.append(
+                "📄 Format dataset tidak sesuai.\n"
+                f"Kolom yang hilang: {', '.join(sorted(missing))}"
+            )
+
+        if warnings:
+            return warnings
+
+        return None
