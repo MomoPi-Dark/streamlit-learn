@@ -28,7 +28,9 @@ class AppPage(BasePage):
     def on_start(self) -> None:
         # STAGE_6 = True hanya jika hasil resampling benar-benar sudah
         # tersimpan di disk — bukan sekadar prasyarat terpenuhi.
-        is_completed = X_TRAIN_RESAMPLED_PATH.exists() and Y_TRAIN_RESAMPLED_PATH.exists()
+        is_completed = (
+            X_TRAIN_RESAMPLED_PATH.exists() and Y_TRAIN_RESAMPLED_PATH.exists()
+        )
         set_session_state(StageKey.STAGE_6, is_completed)
 
     def run(self) -> None:
@@ -40,8 +42,7 @@ class AppPage(BasePage):
             "menggunakan **Synthetic Minority Over-sampling Technique (SMOTE)**."
         )
 
-        st.info(
-            """
+        st.info("""
             **Tahap 6 - Penyeimbangan Kelas (SMOTE)**
 
             SMOTE menghasilkan data sintetis untuk kelas minoritas dengan
@@ -51,8 +52,7 @@ class AppPage(BasePage):
             ⚠️ SMOTE **hanya** diterapkan pada data **train**. Data **test**
             tetap asli (tidak disentuh) supaya evaluasi model tetap objektif
             dan tidak bocor (*data leakage*).
-            """
-        )
+            """)
 
         if warning:
             st.warning(
@@ -61,9 +61,11 @@ class AppPage(BasePage):
             )
 
         st.markdown("---")
-        
+
         if warning:
-            st.error("🚫 Data belum siap. Selesaikan persyaratan di atas terlebih dahulu sebelum melanjutkan ke Smoote.")
+            st.error(
+                "🚫 Data belum siap. Selesaikan persyaratan di atas terlebih dahulu sebelum melanjutkan ke Smoote."
+            )
             st.stop()
 
         if X_TRAIN_RESAMPLED_PATH.exists() and Y_TRAIN_RESAMPLED_PATH.exists():
@@ -174,13 +176,11 @@ class AppPage(BasePage):
             progress.progress(1.0)
             status.success("✅ Penyeimbangan SMOTE selesai.")
 
-            st.success(
-                f"""
+            st.success(f"""
 Jumlah Data Sebelum : {X_resampled.shape[0] - (X_resampled.shape[0] - len(y_resampled)):,}
 
 Jumlah Data Sesudah  : {len(y_resampled):,}
-"""
-            )
+""")
 
             st.rerun()
 
@@ -204,7 +204,7 @@ Jumlah Data Sesudah  : {len(y_resampled):,}
         progress.progress(0.5)
 
         smote = SMOTE(random_state=42, k_neighbors=k_neighbors)
-        X_resampled, y_resampled = smote.fit_resample(X_train, y_train) #type: ignore
+        X_resampled, y_resampled = smote.fit_resample(X_train, y_train)  # type: ignore
 
         status.info("Menyimpan hasil resampling...")
         progress.progress(0.9)

@@ -2,13 +2,14 @@ import os
 import inspect
 from structures.base import BasePage
 
+
 class PageLoader:
     def __init__(self, pages_dir: str = "src/app_pages"):
         self.pages_dir = pages_dir
 
     def load_pages(self) -> list[BasePage]:
         instances: list[BasePage] = []
-        
+
         if not os.path.exists(self.pages_dir):
             os.makedirs(self.pages_dir)
             return instances
@@ -33,7 +34,11 @@ class PageLoader:
             exec(compiled_code, module_scope, module_scope)
 
             for obj in module_scope.values():
-                if inspect.isclass(obj) and issubclass(obj, BasePage) and obj is not BasePage:
+                if (
+                    inspect.isclass(obj)
+                    and issubclass(obj, BasePage)
+                    and obj is not BasePage
+                ):
                     if hasattr(obj, "__page_meta__"):
                         instance = obj()
                         instance.__page_file__ = os.path.abspath(file_path)

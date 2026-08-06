@@ -56,15 +56,13 @@ class AppPage(BasePage):
             "frekuensi kata dan WordCloud per kelas sentimen."
         )
 
-        st.info(
-            """
+        st.info("""
             **Tahap 9 - Visualisasi**
 
             - **Diagram Batang**: 20 kata yang paling sering muncul di seluruh ulasan.
             - **WordCloud per Sentimen**: kata-kata dominan pada ulasan yang
               **diprediksi model** sebagai Positif dan Negatif di data uji.
-            """
-        )
+            """)
 
         if warning:
             st.warning(
@@ -127,7 +125,9 @@ class AppPage(BasePage):
                         key=f"download_wc_{label}",
                     )
                 else:
-                    st.info(f"WordCloud untuk {label} tidak tersedia (tidak ada data diprediksi sebagai {label}).")
+                    st.info(
+                        f"WordCloud untuk {label} tidak tersedia (tidak ada data diprediksi sebagai {label})."
+                    )
 
         st.markdown("---")
 
@@ -183,18 +183,22 @@ class AppPage(BasePage):
     def _generate_word_frequency_chart(self) -> None:
         df = pd.read_csv(PREPROCESSED_CSV_PATH)
 
-        all_words = " ".join(
-            df["clean_ulasan"]
-            .fillna("")
-            .astype(str)
-        ).split()
+        all_words = " ".join(df["clean_ulasan"].fillna("").astype(str)).split()
         word_counts = Counter(all_words)
 
         top_20_words = word_counts.most_common(20)
         df_top_words = pd.DataFrame(top_20_words, columns=["Kata", "Frekuensi"])
 
         fig, ax = plt.subplots(figsize=(12, 8))
-        sns.barplot(x="Frekuensi", y="Kata", data=df_top_words, palette="viridis", ax=ax)
+        sns.barplot(
+            x="Frekuensi",
+            y="Kata",
+            hue="Kata",
+            data=df_top_words,
+            palette="viridis",
+            legend=False,
+            ax=ax,
+        )
         ax.set_title("Top 20 Kata Paling Sering Muncul pada Ulasan NTE", fontsize=16)
         ax.set_xlabel("Frekuensi", fontsize=12)
         ax.set_ylabel("Kata", fontsize=12)
@@ -215,19 +219,16 @@ class AppPage(BasePage):
         return df, y_test, y_pred
 
     def _generate_wordclouds(self, df, y_test, y_pred, progress) -> list[str]:
-        df_test = pd.DataFrame({"actual": y_test, "predicted": y_pred}, index=y_test.index)
+        df_test = pd.DataFrame(
+            {"actual": y_test, "predicted": y_pred}, index=y_test.index
+        )
 
         skipped_labels: list[str] = []
         step = 0.7
 
         for label in SENTIMENT_LABELS:
             subset = df_test[df_test["predicted"] == label]
-            texts = (
-                df.loc[subset.index, "clean_ulasan"]
-                .fillna("")
-                .astype(str)
-                .tolist()
-            )
+            texts = df.loc[subset.index, "clean_ulasan"].fillna("").astype(str).tolist()
 
             text = " ".join(texts)
 

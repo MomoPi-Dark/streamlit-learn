@@ -59,8 +59,7 @@ class AppPage(BasePage):
             "**Multinomial Naive Bayes** berdasarkan fitur TF-IDF dari data latih."
         )
 
-        st.info(
-            """
+        st.info("""
             **Tahap 7 - Training Model**
 
             Multinomial Naive Bayes adalah algoritma yang umum digunakan pada
@@ -69,8 +68,7 @@ class AppPage(BasePage):
 
             Parameter **alpha** (Laplace smoothing) digunakan untuk mencegah
             probabilitas nol pada kata yang tidak muncul di data latih.
-            """
-        )
+            """)
 
         if warning:
             st.warning(
@@ -81,9 +79,11 @@ class AppPage(BasePage):
         st.markdown("---")
 
         if warning:
-            st.error("🚫 Data belum siap. Selesaikan persyaratan di atas terlebih dahulu sebelum melanjutkan ke Smoote.")
+            st.error(
+                "🚫 Data belum siap. Selesaikan persyaratan di atas terlebih dahulu sebelum melanjutkan ke Smoote."
+            )
             st.stop()
-        
+
         if MODEL_PATH.exists():
             self._render_existing_model()
         else:
@@ -102,7 +102,9 @@ class AppPage(BasePage):
         st.success("✅ Model sudah dilatih.")
 
         if is_resampled:
-            st.caption("📌 Model dilatih menggunakan data hasil **SMOTE** (kelas sudah diseimbangkan).")
+            st.caption(
+                "📌 Model dilatih menggunakan data hasil **SMOTE** (kelas sudah diseimbangkan)."
+            )
         else:
             st.caption("📌 Model dilatih menggunakan data train **tanpa SMOTE**.")
 
@@ -150,7 +152,11 @@ class AppPage(BasePage):
         )
 
         if X_train is not None:
-            source_label = "hasil SMOTE (kelas sudah diseimbangkan)" if is_resampled else "hasil Train-Test Split (tanpa SMOTE)"
+            source_label = (
+                "hasil SMOTE (kelas sudah diseimbangkan)"
+                if is_resampled
+                else "hasil Train-Test Split (tanpa SMOTE)"
+            )
             st.info(
                 f"Data latih siap digunakan — {source_label}: "
                 f"{X_train.shape[0]:,} data, {X_train.shape[1]:,} fitur."
@@ -200,15 +206,13 @@ class AppPage(BasePage):
             progress.progress(1.0)
             status.success("✅ Training Model selesai.")
 
-            st.success(
-                f"""
+            st.success(f"""
 Algoritma      : Multinomial Naive Bayes
 
 Alpha          : {alpha}
 
 Akurasi Train  : {train_accuracy * 100:.2f}%
-"""
-            )
+""")
 
             st.rerun()
 
@@ -248,7 +252,11 @@ Akurasi Train  : {train_accuracy * 100:.2f}%
     def _validate_requirements(self) -> list[str] | None:
         warnings: list[str] = []
 
-        if not X_TRAIN_PATH.exists() or not Y_TRAIN_PATH.exists() or not get_session_state(StageKey.STAGE_5):
+        if (
+            not X_TRAIN_PATH.exists()
+            or not Y_TRAIN_PATH.exists()
+            or not get_session_state(StageKey.STAGE_5)
+        ):
             warnings.append("🔀 Hasil Train-Test Split belum tersedia.")
 
         if warnings:

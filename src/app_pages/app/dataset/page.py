@@ -13,57 +13,53 @@ from lib.paths import SLANG_CSV_PATH
 
 APP_ID = "com.hottagames.nte"
 
+
 @Options(
     page_name="dataset",
     menu_name="Dataset",
     menu_icon="📥",
     category="dataset",
-    requires_model=False
+    requires_model=False,
 )
 class AppPage(BasePage):
     def on_start(self) -> None:
         set_session_state(StageKey.STAGE_1_DATASET, False)
-        
+
         if self._validate_requirements():
             return
-        
+
         with open(ULASAN_RAW_CSV_PATH, encoding="utf-8") as f:
             st.session_state[StageCollect.DATASET_COUNT] = sum(1 for _ in f) - 1
-            
+
         set_session_state(StageKey.STAGE_1_DATASET, True)
-        
+
         if get_session_state(StageKey.STAGE_1_SLANG):
             set_session_state(StageKey.STAGE_1, True)
-        
+
     def run(self) -> None:
         warning = self._validate_requirements()
-        
+
         st.title("📥 Pengumpulan Dataset")
         st.write(f"Ambil ulasan dari Google Play Store untuk aplikasi `{APP_ID}`.")
-        st.info(
-            """
+        st.info("""
             **Tahap 1 - Pengumpulan Dataset**
 
             - Mengambil atau mengunggah dataset ulasan Google Play Store.
             - Memastikan format dataset sesuai dengan kebutuhan aplikasi.
             - Jika valid, status **Dataset** akan berubah menjadi **Selesai (✓)** dan tahap berikutnya dapat dijalankan.
-            """
-        )
+            """)
 
-        
-        st.markdown("---")  
-        
+        st.markdown("---")
 
         if warning:
             st.error("Belum ada dataset tersimpan.")
             st.markdown("---")
-            
+
             self._render_upload_dataset(force=True)
             self._render_scrape_form(force=False)
         else:
             self._render_existing_dataset()
-        
-            
+
     def _render_existing_dataset(self) -> None:
         df_existing = pd.read_csv(ULASAN_RAW_CSV_PATH)
 
@@ -95,8 +91,7 @@ class AppPage(BasePage):
 
         self._render_upload_dataset(force=True)
         self._render_scrape_form(force=True)
-          
-                    
+
     def _render_scrape_form(self, force: bool) -> None:
         with st.expander("🔄 Scraping Ulang (timpa data lama)"):
             if force:
@@ -105,7 +100,7 @@ class AppPage(BasePage):
                     "Seluruh hasil labeling, preprocessing, TF-IDF, dan Train-Test Split "
                     "yang sudah ada juga akan **dihapus** karena tidak lagi sesuai dengan dataset baru."
                 )
-            
+
             count = st.number_input(
                 "Jumlah ulasan yang diambil",
                 min_value=100,
@@ -151,7 +146,9 @@ class AppPage(BasePage):
                         )
 
                     if start_date > end_date:
-                        st.error("Tanggal awal tidak boleh lebih besar dari tanggal akhir.")
+                        st.error(
+                            "Tanggal awal tidak boleh lebih besar dari tanggal akhir."
+                        )
                         return
 
             button_label = "🔄 Scraping Ulang" if force else "🚀 Mulai Scraping"
@@ -210,8 +207,7 @@ class AppPage(BasePage):
                 )
 
                 st.rerun()
-           
-           
+
     def _render_upload_dataset(self, force: bool) -> None:
         with st.expander("📤 Upload Dataset"):
             if force:
@@ -220,16 +216,15 @@ class AppPage(BasePage):
                     "Seluruh hasil labeling, preprocessing, TF-IDF, dan Train-Test Split "
                     "yang sudah ada juga akan **dihapus** karena tidak lagi sesuai dengan dataset baru."
                 )
-            
+
             df = None
-            
+
             uploaded_file = st.file_uploader(
                 "Pilih file CSV",
                 type=["csv"],
                 help=f"Kolom wajib: {', '.join(REQUIRED_COLUMNS)}",
                 key=f"upload_csv_{st.session_state[StateKey.UPLOAD_KEY]}",
             )
-
 
             if uploaded_file is not None:
                 try:
@@ -288,7 +283,7 @@ class AppPage(BasePage):
 
                 st.session_state[StateKey.UPLOAD_KEY] += 1
                 st.rerun()
-                    
+
     @staticmethod
     def _scrape_reviews(
         app_id: str,
@@ -303,11 +298,7 @@ class AppPage(BasePage):
         retries = 0
 
         start_dt = pd.Timestamp(start_date) if start_date else None
-        end_dt = (
-            pd.Timestamp(end_date) + pd.Timedelta(days=1)
-            if end_date
-            else None
-        )
+        end_dt = pd.Timestamp(end_date) + pd.Timedelta(days=1) if end_date else None
 
         while len(all_reviews) < count:
             try:
@@ -317,7 +308,7 @@ class AppPage(BasePage):
                     country="id",
                     sort=Sort.NEWEST,
                     count=1000,
-                    continuation_token=continuation_token, #type: ignore
+                    continuation_token=continuation_token,  # type: ignore
                 )
                 retries = 0
 
@@ -371,7 +362,7 @@ class AppPage(BasePage):
             df = df.sort_values("at", ascending=False)
 
         return df.iloc[:count].reset_index(drop=True)
-    
+
     def _validate_requirements(self) -> list[str] | None:
         warnings: list[str] = []
 
@@ -382,7 +373,9 @@ class AppPage(BasePage):
         try:
             df = pd.read_csv(ULASAN_RAW_CSV_PATH, nrows=5)
         except Exception:
-            warnings.append("📄 Dataset tidak dapat dibaca. Silakan lakukan scraping ulang.")
+            warnings.append(
+                "📄 Dataset tidak dapat dibaca. Silakan lakukan scraping ulang."
+            )
             return warnings
 
         missing = required_columns - set(df.columns)

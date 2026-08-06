@@ -54,6 +54,13 @@ def clear_downstream_artifacts() -> None:
         if file_path.exists():
             file_path.unlink()
 
-    for directory in (TFIDF_DIR, SPLIT_DIR, SMOTE_DIR, MODEL_DIR, EVALUATION_DIR, IMAGES_DIR):
+    for directory in (
+        TFIDF_DIR,
+        SPLIT_DIR,
+        SMOTE_DIR,
+        MODEL_DIR,
+        EVALUATION_DIR,
+        IMAGES_DIR,
+    ):
         if directory.exists():
             shutil.rmtree(directory)

@@ -4,23 +4,36 @@ import urllib.request
 from pathlib import Path
 from structures.base import BasePage, Options
 from lib.paths import CSV_DIR, SLANG_CSV_PATH
-from lib.enum import StateKey, StageKey, get_session_state, set_session_state, StageCollect
+from lib.enum import (
+    StateKey,
+    StageKey,
+    get_session_state,
+    set_session_state,
+    StageCollect,
+)
 from lib.paths import SLANG_CSV_PATH
 
 URL_SLANG = "https://raw.githubusercontent.com/nasalsabila/kamus-alay/master/colloquial-indonesian-lexicon.csv"
 
-REQUIRED_COLUMNS  = [
-   "slang","formal","In-dictionary","context","category1","category2","category3"
+REQUIRED_COLUMNS = [
+    "slang",
+    "formal",
+    "In-dictionary",
+    "context",
+    "category1",
+    "category2",
+    "category3",
 ]
-        
+
 required_columns = set(REQUIRED_COLUMNS)
+
 
 @Options(
     page_name="slang",
     menu_name="Kamus Slang",
     menu_icon="📚",
     category="dataset",
-    requires_model=False
+    requires_model=False,
 )
 class AppPage(BasePage):
     def on_start(self) -> None:
@@ -28,7 +41,7 @@ class AppPage(BasePage):
 
         if self._validate_requirements():
             return
-    
+
         set_session_state(StageKey.STAGE_1_SLANG, True)
         if get_session_state(StageKey.STAGE_1_DATASET):
             set_session_state(StageKey.STAGE_1, True)
@@ -39,8 +52,7 @@ class AppPage(BasePage):
             "Kamus ini digunakan pada tahap preprocessing untuk mengubah "
             "kata-kata non-baku (slang) menjadi bentuk bakunya."
         )
-        st.info(
-            f"""
+        st.info(f"""
             **Tahap Pendukung - Kamus Normalisasi Kata Slang**
 
             Kamus ini digunakan untuk mengubah kata-kata tidak baku (slang) menjadi
@@ -58,8 +70,7 @@ class AppPage(BasePage):
 
             Seluruh data pada kamus akan digunakan pada tahap **Preprocessing** untuk
             meningkatkan kualitas teks sebelum proses ekstraksi fitur (TF-IDF).
-            """
-        )
+            """)
         st.markdown("---")
 
         if SLANG_CSV_PATH.exists():
@@ -82,26 +93,26 @@ class AppPage(BasePage):
         with col2:
             st.metric("File", SLANG_CSV_PATH.name)
 
-        st.dataframe(df_slang.head(50), width='stretch')
+        st.dataframe(df_slang.head(50), width="stretch")
 
         st.download_button(
             label="⬇️ Download Kamus (CSV)",
             data=SLANG_CSV_PATH.read_bytes(),
             file_name=SLANG_CSV_PATH.name,
             mime="text/csv",
-            width='stretch',
+            width="stretch",
         )
-        
+
         st.write("---")
 
         with st.expander("🔄 Unduh Ulang Kamus"):
             st.warning("File kamus yang ada akan ditimpa jika Anda mengunduh ulang.")
-            if st.button("Unduh Ulang Kamus", width='stretch', type="primary"):
+            if st.button("Unduh Ulang Kamus", width="stretch", type="primary"):
                 self._download_dictionary()
 
     def _render_download_section(self):
         st.info("Kamus slang belum ada. Silakan unduh terlebih dahulu.")
-        if st.button("🚀 Unduh Kamus Slang Sekarang", width='stretch', type="primary"):
+        if st.button("🚀 Unduh Kamus Slang Sekarang", width="stretch", type="primary"):
             self._download_dictionary()
 
     def _download_dictionary(self):
@@ -123,7 +134,9 @@ class AppPage(BasePage):
         try:
             df = pd.read_csv(SLANG_CSV_PATH, nrows=5)
         except Exception:
-            warnings.append("📄 Dataset tidak dapat dibaca. Silakan lakukan scraping ulang.")
+            warnings.append(
+                "📄 Dataset tidak dapat dibaca. Silakan lakukan scraping ulang."
+            )
             return warnings
 
         missing = required_columns - set(df.columns)

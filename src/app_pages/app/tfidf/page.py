@@ -8,8 +8,25 @@ from typing import Any
 from scipy import sparse
 from datetime import datetime
 from structures.base import BasePage, Options
-from lib.enum import StateKey, StageCollect, StageKey, get_session_state, set_session_state
-from lib.paths import ULASAN_LABELED_CSV_PATH, ULASAN_RAW_CSV_PATH, SLANG_CSV_PATH, CSV_DIR, PREPROCESSED_CSV_PATH, TFIDF_FEATURE_NAMES_PATH, TFIDF_DIR, TFIDF_MATRIX_PATH, TFIDF_VECTORIZER_PATH, TFIDF_DIR
+from lib.enum import (
+    StateKey,
+    StageCollect,
+    StageKey,
+    get_session_state,
+    set_session_state,
+)
+from lib.paths import (
+    ULASAN_LABELED_CSV_PATH,
+    ULASAN_RAW_CSV_PATH,
+    SLANG_CSV_PATH,
+    CSV_DIR,
+    PREPROCESSED_CSV_PATH,
+    TFIDF_FEATURE_NAMES_PATH,
+    TFIDF_DIR,
+    TFIDF_MATRIX_PATH,
+    TFIDF_VECTORIZER_PATH,
+    TFIDF_DIR,
+)
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 REQUIRED_COLUMNS = [
@@ -17,6 +34,7 @@ REQUIRED_COLUMNS = [
     "tokenizing",
 ]
 required_columns = set(REQUIRED_COLUMNS)
+
 
 def identity_tokenizer(tokens: list[str]) -> list[str]:
     return tokens
@@ -41,7 +59,7 @@ class AppPage(BasePage):
 
         if self._validate_columns():
             return
-        
+
         is_completed = TFIDF_VECTORIZER_PATH.exists() and TFIDF_MATRIX_PATH.exists()
 
         set_session_state(StageKey.STAGE_4, is_completed)
@@ -57,8 +75,7 @@ class AppPage(BasePage):
             "Mengubah hasil preprocessing menjadi representasi numerik menggunakan metode **Term Frequency-Inverse Document Frequency (TF-IDF)**."
         )
 
-        st.info(
-            """
+        st.info("""
             **Tahap 4 - Pembobotan TF-IDF**
 
             Tahap ini mengubah hasil preprocessing menjadi representasi numerik
@@ -66,8 +83,7 @@ class AppPage(BasePage):
 
             Hasil proses ini akan digunakan sebagai fitur masukan pada tahap
             **Training Model**.
-            """
-        )
+            """)
 
         if warning:
             st.warning(
@@ -76,9 +92,11 @@ class AppPage(BasePage):
             )
 
         st.markdown("---")
-        
+
         if warning:
-            st.error("🚫 Data belum siap. Selesaikan persyaratan di atas terlebih dahulu sebelum melanjutkan ke TF-IDF.")
+            st.error(
+                "🚫 Data belum siap. Selesaikan persyaratan di atas terlebih dahulu sebelum melanjutkan ke TF-IDF."
+            )
             st.stop()
 
         if TFIDF_VECTORIZER_PATH.exists() and TFIDF_MATRIX_PATH.exists():
@@ -119,9 +137,7 @@ class AppPage(BasePage):
             )
 
         with col4:
-            mtime = datetime.fromtimestamp(
-                TFIDF_MATRIX_PATH.stat().st_mtime
-            )
+            mtime = datetime.fromtimestamp(TFIDF_MATRIX_PATH.stat().st_mtime)
 
             st.metric(
                 "Terakhir Diproses",
@@ -158,7 +174,7 @@ class AppPage(BasePage):
             )
 
             self._render_tfidf(force=True)
-            
+
     def _render_tfidf(self, force: bool = False) -> None:
         df = pd.read_csv(PREPROCESSED_CSV_PATH)
 
@@ -173,9 +189,7 @@ class AppPage(BasePage):
         st.markdown("---")
 
         if st.button(
-            "🚀 Mulai Pembobotan TF-IDF"
-            if not force
-            else "🔄 Hitung Ulang TF-IDF",
+            "🚀 Mulai Pembobotan TF-IDF" if not force else "🔄 Hitung Ulang TF-IDF",
             type="primary",
             width="stretch",
             disabled=bool(self._validate_requirements())
@@ -209,13 +223,11 @@ class AppPage(BasePage):
 
             status.success("✅ Pembobotan TF-IDF selesai.")
 
-            st.success(
-                f"""
+            st.success(f"""
     Jumlah Vocabulary : {len(vectorizer.get_feature_names_out()):,}
 
     Shape Matriks TF-IDF : {matrix.shape}
-    """
-            )
+    """)
 
             preview = pd.DataFrame(
                 matrix[:5, :10].toarray(),
@@ -250,7 +262,7 @@ class AppPage(BasePage):
         progress.progress(0.4)
 
         tfidf = TfidfVectorizer(
-            lowercase=False,   # your tokens are presumably already lowercased/cleaned
+            lowercase=False,  # your tokens are presumably already lowercased/cleaned
             token_pattern=r"(?u)\S+",  # split on whitespace, keep tokens as-is
         )
 
@@ -263,7 +275,7 @@ class AppPage(BasePage):
         progress.progress(0.9)
 
         return tfidf, X_tfidf
-    
+
     def _save_vectorizer(
         self,
         vectorizer: TfidfVectorizer,
@@ -288,7 +300,7 @@ class AppPage(BasePage):
             TFIDF_MATRIX_PATH,
             matrix,
         )
-        
+
     def _preview_matrix(
         self,
         matrix,
@@ -337,7 +349,9 @@ class AppPage(BasePage):
         except pd.errors.EmptyDataError:
             return ["📄 Dataset preprocessing kosong."]
         except pd.errors.ParserError:
-            return ["📄 Dataset preprocessing tidak dapat diurai (format CSV tidak valid)."]
+            return [
+                "📄 Dataset preprocessing tidak dapat diurai (format CSV tidak valid)."
+            ]
         except Exception:
             return ["📄 Dataset preprocessing tidak dapat dibaca."]
 

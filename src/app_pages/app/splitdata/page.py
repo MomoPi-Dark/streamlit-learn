@@ -74,8 +74,6 @@ class AppPage(BasePage):
             st.error("🚫 Data belum siap. Selesaikan persyaratan di atas terlebih dahulu sebelum melanjutkan ke Split Data.")
             st.stop()
         
-        
-
         if X_TRAIN_PATH.exists() and X_TEST_PATH.exists():
             self._render_existing_split()
         else:

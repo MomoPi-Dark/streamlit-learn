@@ -69,6 +69,10 @@ class AppPage(BasePage):
 
         st.markdown("---")
 
+        if self._validate_requirements():
+            st.error("🚫 Data belum siap. Selesaikan persyaratan di atas terlebih dahulu sebelum melanjutkan ke Evaluation.")
+            st.stop()
+            
         if METRICS_PATH.exists():
             self._render_existing_evaluation()
         else:

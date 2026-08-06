@@ -4,10 +4,7 @@ from structures.base import BasePage, Options
 
 
 @Options(
-    page_name="overview",
-    menu_name="Overview",
-    menu_icon="🏠",
-    requires_model=False
+    page_name="overview", menu_name="Overview", menu_icon="🏠", requires_model=False
 )
 class AppPage(BasePage):
     def run(self) -> None:
@@ -43,13 +40,11 @@ class AppPage(BasePage):
 
         # ===== Panduan alur kerja =====
         st.subheader("📋 Alur Penggunaan")
-        st.markdown(
-            """
+        st.markdown("""
             1. **Dataset** — Upload atau muat dataset ulasan game yang akan dianalisis.
             2. **Modeling** — Latih model TF-IDF + Multinomial Naive Bayes dari dataset.
             3. **Testing Real-Time** — Uji klasifikasi sentimen langsung dari input teks.
-            """
-        )
+            """)
 
         if not is_ready:
             st.info(

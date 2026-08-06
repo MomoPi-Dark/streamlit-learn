@@ -9,33 +9,46 @@ from functools import lru_cache
 
 from streamlit.runtime.scriptrunner import add_script_run_ctx
 
-from lib.paths import ULASAN_LABELED_CSV_PATH, ULASAN_RAW_CSV_PATH, SLANG_CSV_PATH, CSV_DIR, PREPROCESSED_CSV_PATH
-from lib.enum import StateKey, StageCollect, StageKey, get_session_state, set_session_state
+from lib.paths import (
+    ULASAN_LABELED_CSV_PATH,
+    ULASAN_RAW_CSV_PATH,
+    SLANG_CSV_PATH,
+    CSV_DIR,
+    PREPROCESSED_CSV_PATH,
+)
+from lib.enum import (
+    StateKey,
+    StageCollect,
+    StageKey,
+    get_session_state,
+    set_session_state,
+)
 from structures.base import BasePage, Options
+from stopwords import index
 
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
 from Sastrawi.Dictionary.ArrayDictionary import ArrayDictionary
 from Sastrawi.StopWordRemover.StopWordRemover import StopWordRemover
 
-RE_URL = re.compile(r'http\S+|www\S+')
-RE_MENTION_HASHTAG = re.compile(r'@\w+|#\w+')
+RE_URL = re.compile(r"http\S+|www\S+")
+RE_MENTION_HASHTAG = re.compile(r"@\w+|#\w+")
 RE_EMOJI = re.compile(
-    r'[\U0001F600-\U0001F64F'
-    r'\U0001F300-\U0001F5FF'
-    r'\U0001F680-\U0001F6FF'
-    r'\U0001F1E0-\U0001F1FF'
-    r'\U00002700-\U000027BF'
-    r'\U0001F900-\U0001F9FF'
-    r'\U00002600-\U000026FF'
-    r'\U0001FA70-\U0001FAFF'
-    r'\U00002500-\U00002BEF'
-    r']+'
+    r"[\U0001F600-\U0001F64F"
+    r"\U0001F300-\U0001F5FF"
+    r"\U0001F680-\U0001F6FF"
+    r"\U0001F1E0-\U0001F1FF"
+    r"\U00002700-\U000027BF"
+    r"\U0001F900-\U0001F9FF"
+    r"\U00002600-\U000026FF"
+    r"\U0001FA70-\U0001FAFF"
+    r"\U00002500-\U00002BEF"
+    r"]+"
 )
-RE_NON_WORD = re.compile(r'[^\w\s]')
-RE_MULTISPACE = re.compile(r'\s+')
-RE_DIGIT = re.compile(r'\d+')
-RE_REPEAT_CHAR = re.compile(r'(.)\1{2,}')
+RE_NON_WORD = re.compile(r"[^\w\s]")
+RE_MULTISPACE = re.compile(r"\s+")
+RE_DIGIT = re.compile(r"\d+")
+RE_REPEAT_CHAR = re.compile(r"(.)\1{2,}")
 
 REQUIRED_COLUMNS = [
     "username",
@@ -51,7 +64,11 @@ required_columns = set(REQUIRED_COLUMNS)
 # lintas rerun Streamlit maupun lintas thread (bukan re-create tiap kali
 # AppPage di-instantiate ulang).
 _stopword_factory = StopWordRemoverFactory()
-_stopwords = _stopword_factory.get_stop_words()
+_stopwords = sorted(
+    set(_stopword_factory.get_stop_words())
+    | set(index.load_stopwords())
+    | {"nya", "di"}
+)
 _dictionary = ArrayDictionary(_stopwords)
 _stopword_remover = StopWordRemover(_dictionary)
 _stemmer = StemmerFactory().create_stemmer()
@@ -76,6 +93,7 @@ def _stem_word_cached(word: str) -> str:
 # Solusi: progress disimpan di dictionary module-level biasa, dilindungi
 # lock, sama sekali tidak bergantung pada context Streamlit.
 _progress_lock = threading.Lock()
+
 
 def _get_progress_store() -> dict:
     """
@@ -145,7 +163,7 @@ class AppPage(BasePage):
 
         if self._validate_requirements():
             return
-        
+
         if not PREPROCESSED_CSV_PATH.exists():
             return
 
@@ -158,8 +176,7 @@ class AppPage(BasePage):
         st.write(
             "Melakukan pembersihan dan normalisasi teks ulasan sebelum proses pembobotan TF-IDF."
         )
-        st.info(
-            """
+        st.info("""
             **Tahap 3 - Preprocessing Data**
 
             Tahap ini bertujuan membersihkan dan menyiapkan data teks sebelum
@@ -175,8 +192,7 @@ class AppPage(BasePage):
             - 🔠 Tokenizing
 
             Dataset hasil preprocessing akan digunakan pada tahap berikutnya.
-            """
-        )
+            """)
 
         if warning:
             st.warning(
@@ -187,7 +203,9 @@ class AppPage(BasePage):
         st.markdown("---")
 
         if warning:
-            st.error("🚫 Data belum siap. Selesaikan persyaratan di atas terlebih dahulu sebelum melanjutkan ke Preprocessing.")
+            st.error(
+                "🚫 Data belum siap. Selesaikan persyaratan di atas terlebih dahulu sebelum melanjutkan ke Preprocessing."
+            )
             st.stop()
 
         if PREPROCESSED_CSV_PATH.exists():
@@ -288,19 +306,22 @@ class AppPage(BasePage):
             ):
                 stop_event = threading.Event()
                 set_session_state(stop_event_key, stop_event)
-                _progress_set(progress_key, {
-                    "step_idx": 0,
-                    "row": 0,
-                    "total_rows": len(df_source),
-                    "pct": 0.0,
-                    "finished": False,
-                    "stopped": False,
-                    "error": None,
-                    "df": None,
-                    "preview_input_col": None,
-                    "preview_output_col": None,
-                    "preview_rows": None,
-                })
+                _progress_set(
+                    progress_key,
+                    {
+                        "step_idx": 0,
+                        "row": 0,
+                        "total_rows": len(df_source),
+                        "pct": 0.0,
+                        "finished": False,
+                        "stopped": False,
+                        "error": None,
+                        "df": None,
+                        "preview_input_col": None,
+                        "preview_output_col": None,
+                        "preview_rows": None,
+                    },
+                )
                 set_session_state(last_seen_step_key, -1)
 
                 thread = threading.Thread(
@@ -316,7 +337,12 @@ class AppPage(BasePage):
                 st.toast("🚀 Preprocessing dimulai di background...", icon="🚀")
                 st.rerun()
         else:
-            if st.button("⏹️ Stop Proses", type="secondary", width="stretch", key=f"stop_btn_{force}"):
+            if st.button(
+                "⏹️ Stop Proses",
+                type="secondary",
+                width="stretch",
+                key=f"stop_btn_{force}",
+            ):
                 stop_event = get_session_state(stop_event_key)
                 if stop_event:
                     stop_event.set()
@@ -370,20 +396,27 @@ class AppPage(BasePage):
             set_session_state(last_seen_step_key, step_idx)
 
         status_label = (
-            "⚙️ Memproses dataset..." if not finished and not stopped and not error
-            else "✅ Preprocessing selesai" if finished
-            else "⏹️ Proses dihentikan" if stopped
-            else "❌ Preprocessing gagal"
+            "⚙️ Memproses dataset..."
+            if not finished and not stopped and not error
+            else (
+                "✅ Preprocessing selesai"
+                if finished
+                else "⏹️ Proses dihentikan" if stopped else "❌ Preprocessing gagal"
+            )
         )
         status_state = (
-            "running" if not finished and not stopped and not error
-            else "complete" if finished
-            else "error"
+            "running"
+            if not finished and not stopped and not error
+            else "complete" if finished else "error"
         )
 
-        with st.status(status_label, expanded=(not finished), state=status_state) as status_box:
+        with st.status(
+            status_label, expanded=(not finished), state=status_state
+        ) as status_box:
             cols = st.columns(total_steps)
-            for i, (col, (label, *_rest)) in enumerate(zip(cols, PREPROCESSING_STEPS_META)):
+            for i, (col, (label, *_rest)) in enumerate(
+                zip(cols, PREPROCESSING_STEPS_META)
+            ):
                 with col:
                     if i < step_idx or finished:
                         st.markdown(
@@ -416,7 +449,8 @@ class AppPage(BasePage):
 
             step_label = (
                 PREPROCESSING_STEPS_META[step_idx][0]
-                if step_idx < total_steps else "Selesai"
+                if step_idx < total_steps
+                else "Selesai"
             )
             st.markdown(
                 f"**{step_label}** — baris {row:,}/{total_rows:,} "
@@ -442,7 +476,9 @@ class AppPage(BasePage):
 
         if stopped:
             set_session_state(running_key, False)
-            st.info(f"Progres tersimpan sebagian: {row:,} dari {total_rows:,} data terproses.")
+            st.info(
+                f"Progres tersimpan sebagian: {row:,} dari {total_rows:,} data terproses."
+            )
             _progress_delete(progress_key)
             st.rerun()
             return
@@ -495,7 +531,9 @@ class AppPage(BasePage):
 
         try:
             total_steps = len(PREPROCESSING_STEPS_META)
-            total_weight = sum(STEP_WEIGHTS[label] for label, *_ in PREPROCESSING_STEPS_META)
+            total_weight = sum(
+                STEP_WEIGHTS[label] for label, *_ in PREPROCESSING_STEPS_META
+            )
 
             func_map = {
                 "Case Folding": self._case_folding,
@@ -506,50 +544,69 @@ class AppPage(BasePage):
                 "Tokenizing": self._tokenize,
             }
 
-            for step_idx, (label, input_col, output_col) in enumerate(PREPROCESSING_STEPS_META):
+            for step_idx, (label, input_col, output_col) in enumerate(
+                PREPROCESSING_STEPS_META
+            ):
                 func = func_map[label]
 
                 if output_col not in df.columns:
                     df[output_col] = pd.Series(dtype="object")
 
                 weight_before_step = sum(
-                    STEP_WEIGHTS[PREPROCESSING_STEPS_META[j][0]] for j in range(step_idx)
+                    STEP_WEIGHTS[PREPROCESSING_STEPS_META[j][0]]
+                    for j in range(step_idx)
                 )
 
                 for i, idx in enumerate(df.index, start=1):
                     if stop_event.is_set():
-                        _progress_set(progress_key, {
-                            "step_idx": step_idx,
-                            "row": i,
-                            "total_rows": total_rows,
-                            "pct": (weight_before_step + STEP_WEIGHTS[label] * (i / total_rows)) / total_weight,
-                            "finished": False,
-                            "stopped": True,
-                            "error": None,
-                            "df": df.iloc[:i].reset_index(drop=True),
-                            "preview_input_col": input_col,
-                            "preview_output_col": output_col,
-                            "preview_rows": df.iloc[max(0, i - preview_size):i][[input_col, output_col]].reset_index(drop=True),
-                        })
+                        _progress_set(
+                            progress_key,
+                            {
+                                "step_idx": step_idx,
+                                "row": i,
+                                "total_rows": total_rows,
+                                "pct": (
+                                    weight_before_step
+                                    + STEP_WEIGHTS[label] * (i / total_rows)
+                                )
+                                / total_weight,
+                                "finished": False,
+                                "stopped": True,
+                                "error": None,
+                                "df": df.iloc[:i].reset_index(drop=True),
+                                "preview_input_col": input_col,
+                                "preview_output_col": output_col,
+                                "preview_rows": df.iloc[max(0, i - preview_size) : i][
+                                    [input_col, output_col]
+                                ].reset_index(drop=True),
+                            },
+                        )
                         return
 
                     df.at[idx, output_col] = func(df.at[idx, input_col])
 
                     if i % update_every == 0 or i == total_rows:
-                        pct = (weight_before_step + STEP_WEIGHTS[label] * (i / total_rows)) / total_weight
-                        _progress_set(progress_key, {
-                            "step_idx": step_idx,
-                            "row": i,
-                            "total_rows": total_rows,
-                            "pct": pct,
-                            "finished": False,
-                            "stopped": False,
-                            "error": None,
-                            "df": None,
-                            "preview_input_col": input_col,
-                            "preview_output_col": output_col,
-                            "preview_rows": df.iloc[max(0, i - preview_size):i][[input_col, output_col]].reset_index(drop=True),
-                        })
+                        pct = (
+                            weight_before_step + STEP_WEIGHTS[label] * (i / total_rows)
+                        ) / total_weight
+                        _progress_set(
+                            progress_key,
+                            {
+                                "step_idx": step_idx,
+                                "row": i,
+                                "total_rows": total_rows,
+                                "pct": pct,
+                                "finished": False,
+                                "stopped": False,
+                                "error": None,
+                                "df": None,
+                                "preview_input_col": input_col,
+                                "preview_output_col": output_col,
+                                "preview_rows": df.iloc[max(0, i - preview_size) : i][
+                                    [input_col, output_col]
+                                ].reset_index(drop=True),
+                            },
+                        )
 
                 if label == "Stemming":
                     # Filter out empty rows after stemming
@@ -557,85 +614,160 @@ class AppPage(BasePage):
                     df = df[df[output_col].astype(str).str.strip() != ""].copy()
                     total_rows = len(df)
 
-
             # PENTING: blok ini di LUAR kedua loop (for step_idx & for i, idx),
             # supaya "finished": True hanya ditulis SEKALI, setelah SEMUA step
             # dan SEMUA baris selesai diproses -- bukan setiap iterasi baris.
-            _progress_set(progress_key, {
-                "step_idx": total_steps,
-                "row": total_rows,
-                "total_rows": total_rows,
-                "pct": 1.0,
-                "finished": True,
-                "stopped": False,
-                "error": None,
-                "df": df.reset_index(drop=True),
-                "preview_input_col": None,
-                "preview_output_col": None,
-                "preview_rows": None,
-            })
+            _progress_set(
+                progress_key,
+                {
+                    "step_idx": total_steps,
+                    "row": total_rows,
+                    "total_rows": total_rows,
+                    "pct": 1.0,
+                    "finished": True,
+                    "stopped": False,
+                    "error": None,
+                    "df": df.reset_index(drop=True),
+                    "preview_input_col": None,
+                    "preview_output_col": None,
+                    "preview_rows": None,
+                },
+            )
         except Exception as e:
-            _progress_set(progress_key, {
-                "step_idx": 0,
-                "row": 0,
-                "total_rows": total_rows,
-                "pct": 0.0,
-                "finished": False,
-                "stopped": False,
-                "error": str(e),
-                "df": None,
-                "preview_input_col": None,
-                "preview_output_col": None,
-                "preview_rows": None,
-            })
+            _progress_set(
+                progress_key,
+                {
+                    "step_idx": 0,
+                    "row": 0,
+                    "total_rows": total_rows,
+                    "pct": 0.0,
+                    "finished": False,
+                    "stopped": False,
+                    "error": str(e),
+                    "df": None,
+                    "preview_input_col": None,
+                    "preview_output_col": None,
+                    "preview_rows": None,
+                },
+            )
 
     def _case_folding(self, text) -> str:
         if pd.isna(text):
-            return ''
+            return ""
         return str(text).lower()
 
     def _cleaning(self, text: str) -> str:
-        text = RE_URL.sub('', text)
-        text = RE_MENTION_HASHTAG.sub('', text)
-        text = RE_EMOJI.sub('', text)
-        text = RE_DIGIT.sub('', text)
-        text = RE_NON_WORD.sub('', text)
-        text = RE_REPEAT_CHAR.sub(r'\1', text)
-        text = RE_MULTISPACE.sub(' ', text).strip()
+        text = RE_URL.sub("", text)
+        text = RE_MENTION_HASHTAG.sub("", text)
+        text = RE_EMOJI.sub("", text)
+        text = RE_DIGIT.sub("", text)
+        text = RE_NON_WORD.sub("", text)
+        text = RE_REPEAT_CHAR.sub(r"\1", text)
+        text = RE_MULTISPACE.sub(" ", text).strip()
         return text
 
     @lru_cache(maxsize=1)
     def _load_slang_dictionary(self) -> dict[str, str]:
         slang_dict = {
-            'gak': 'tidak', 'ga': 'tidak', 'gk': 'tidak', 'tdk': 'tidak',
-            'nggak': 'tidak', 'ngga': 'tidak', 'kagak': 'tidak', 'gabisa': 'tidak bisa',
-            'gaada': 'tidak ada', 'gajelas': 'tidak jelas', 'gamau': 'tidak mau',
-            'ckp': 'cukup', 'bgt': 'banget', 'yg': 'yang', 'utk': 'untuk',
-            'tlg': 'tolong', 'dr': 'dari', 'jd': 'jadi', 'jgn': 'jangan',
-            'udh': 'sudah', 'udah': 'sudah', 'blm': 'belum', 'sm': 'sama',
-            'sy': 'saya', 'aja': 'saja', 'dgn': 'dengan', 'tp': 'tapi',
-            'gmn': 'bagaimana', 'gimana': 'bagaimana', 'pgn': 'pengen',
-            'pengen': 'ingin', 'mksd': 'maksud', 'mksdnya': 'maksudnya',
-            'jg': 'juga', 'krn': 'karena', 'knp': 'kenapa', 'klo': 'kalau',
-            'kalo': 'kalau', 'gtu': 'begitu', 'gitu': 'begitu', 'skrg': 'sekarang',
-            'skrng': 'sekarang', 'trs': 'terus', 'dpt': 'dapat', 'liat': 'lihat',
-            'pake': 'pakai', 'bikin': 'membuat', 'nih': 'ini', 'bnyk': 'banyak',
-            'org': 'orang', 'bs': 'bisa', 'bsk': 'besok', 'emg': 'memang',
-            'emang': 'memang', 'pny': 'punya', 'gpp': 'tidak apa-apa',
-            'gapapa': 'tidak apa-apa', 'bgs': 'bagus', 'mantul': 'mantap betul',
-            'parah': 'sangat', 'ribet': 'rumit', 'gw': 'saya', 'gue': 'saya',
-            'lu': 'kamu', 'lo': 'kamu', 'sbnrnya': 'sebenarnya',
-            'sbnernya': 'sebenarnya', 'bbrp': 'beberapa', 'stlh': 'setelah',
-            'sblm': 'sebelum', 'msh': 'masih', 'trnyt': 'ternyata', 'wkt': 'waktu',
-            'ngelag': 'lag', 'lagging': 'lag', 'ngebug': 'bug',
-            'ngehang': 'macet', 'fc': 'force close', 'maintenance': 'pemeliharaan',
-            'dc': 'disconnect', 'connect': 'tersambung', 'lemot': 'lambat',
-            'berat': 'lambat', 'crash': 'berhenti mendadak', 'restart': 'mulai ulang',
-            'gacha': 'gacha', 'p2w': 'pay to win', 'f2p': 'free to play',
-            'op': 'overpowered', 'nerf': 'pelemahan', 'buff': 'penguatan',
-            'event': 'acara', 'update': 'pembaruan', 'maintenence': 'pemeliharaan',
-            'sultan': 'pemain berdompet tebal', 'noob': 'pemain baru',
-            'cheat': 'kecurangan', 'glitch': 'bug', 'respawn': 'muncul ulang',
+            "gak": "tidak",
+            "ga": "tidak",
+            "gk": "tidak",
+            "tdk": "tidak",
+            "nggak": "tidak",
+            "ngga": "tidak",
+            "kagak": "tidak",
+            "gabisa": "tidak bisa",
+            "gaada": "tidak ada",
+            "gajelas": "tidak jelas",
+            "gamau": "tidak mau",
+            "ckp": "cukup",
+            "bgt": "banget",
+            "yg": "yang",
+            "utk": "untuk",
+            "tlg": "tolong",
+            "dr": "dari",
+            "jd": "jadi",
+            "jgn": "jangan",
+            "udh": "sudah",
+            "udah": "sudah",
+            "blm": "belum",
+            "sm": "sama",
+            "sy": "saya",
+            "aja": "saja",
+            "dgn": "dengan",
+            "tp": "tapi",
+            "gmn": "bagaimana",
+            "gimana": "bagaimana",
+            "pgn": "pengen",
+            "pengen": "ingin",
+            "mksd": "maksud",
+            "mksdnya": "maksudnya",
+            "jg": "juga",
+            "krn": "karena",
+            "knp": "kenapa",
+            "klo": "kalau",
+            "kalo": "kalau",
+            "gtu": "begitu",
+            "gitu": "begitu",
+            "skrg": "sekarang",
+            "skrng": "sekarang",
+            "trs": "terus",
+            "dpt": "dapat",
+            "liat": "lihat",
+            "pake": "pakai",
+            "bikin": "membuat",
+            "nih": "ini",
+            "bnyk": "banyak",
+            "org": "orang",
+            "bs": "bisa",
+            "bsk": "besok",
+            "emg": "memang",
+            "emang": "memang",
+            "pny": "punya",
+            "gpp": "tidak apa-apa",
+            "gapapa": "tidak apa-apa",
+            "bgs": "bagus",
+            "mantul": "mantap betul",
+            "parah": "sangat",
+            "ribet": "rumit",
+            "gw": "saya",
+            "gue": "saya",
+            "lu": "kamu",
+            "lo": "kamu",
+            "sbnrnya": "sebenarnya",
+            "sbnernya": "sebenarnya",
+            "bbrp": "beberapa",
+            "stlh": "setelah",
+            "sblm": "sebelum",
+            "msh": "masih",
+            "trnyt": "ternyata",
+            "wkt": "waktu",
+            "ngelag": "lag",
+            "lagging": "lag",
+            "ngebug": "bug",
+            "ngehang": "macet",
+            "fc": "force close",
+            "maintenance": "pemeliharaan",
+            "dc": "disconnect",
+            "connect": "tersambung",
+            "lemot": "lambat",
+            "berat": "lambat",
+            "crash": "berhenti mendadak",
+            "restart": "mulai ulang",
+            "gacha": "gacha",
+            "p2w": "pay to win",
+            "f2p": "free to play",
+            "op": "overpowered",
+            "nerf": "pelemahan",
+            "buff": "penguatan",
+            "event": "acara",
+            "update": "pembaruan",
+            "maintenence": "pemeliharaan",
+            "sultan": "pemain berdompet tebal",
+            "noob": "pemain baru",
+            "cheat": "kecurangan",
+            "glitch": "bug",
+            "respawn": "muncul ulang",
         }
 
         try:
@@ -666,13 +798,13 @@ class AppPage(BasePage):
 
     def _normalisasi(self, text: str) -> str:
         slang_dict = self._load_slang_dictionary()
-        return ' '.join(slang_dict.get(w, w) for w in text.split())
+        return " ".join(slang_dict.get(w, w) for w in text.split())
 
     def _remove_stopword(self, text: str) -> str:
         return _stopword_remover.remove(text)
 
     def _stemming(self, text: str) -> str:
-        return ' '.join(_stem_word_cached(w) for w in text.split())
+        return " ".join(_stem_word_cached(w) for w in text.split())
 
     def _tokenize(self, text: str) -> list[str]:
         return [t for t in text.split() if len(t) > 2]
@@ -688,7 +820,7 @@ class AppPage(BasePage):
 
         if not ULASAN_LABELED_CSV_PATH.exists():
             warnings.append("🏷️ Tahap Pelabelan Data belum selesai.")
-    
+
         if warnings:
             return warnings
 

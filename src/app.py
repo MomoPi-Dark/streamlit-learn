@@ -7,7 +7,7 @@ import os
 import importlib.util
 from pathlib import Path
 from typing import Any, Optional, cast
-from lib.enum import StateKey,StageKey, get_session_state
+from lib.enum import StateKey, StageKey, get_session_state
 from lib.loader import PageLoader
 from structures.base import BasePage
 from lib.category_config import CategoryConfig, CATEGORY_CONFIG
@@ -16,13 +16,10 @@ from lib.enum import load_session_state
 
 load_session_state()
 
-st.set_page_config(
-    page_title="NTE Sentiment Analyzer",
-    page_icon="🎮",
-    layout="wide"
-)
+st.set_page_config(page_title="NTE Sentiment Analyzer", page_icon="🎮", layout="wide")
 
-st.markdown("""
+st.markdown(
+    """
 <style>
     [data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"] {
         width: 100% !important;
@@ -86,7 +83,10 @@ st.markdown("""
         padding-bottom: 4px;
     }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
+
 
 def get_page_category(page: BasePage) -> Optional[str]:
     """Return category for grouping: from metadata if set, else infer from folder name."""
@@ -110,7 +110,10 @@ def get_page_category(page: BasePage) -> Optional[str]:
     # If file is directly under app_pages (e.g., page.py) => no category
     return None
 
-def find_page_by_url(st_pages: list[StreamlitPage], url_path: str) -> Optional[StreamlitPage]:
+
+def find_page_by_url(
+    st_pages: list[StreamlitPage], url_path: str
+) -> Optional[StreamlitPage]:
     if not url_path:
         return None
     target = url_path.strip("/")
@@ -118,6 +121,7 @@ def find_page_by_url(st_pages: list[StreamlitPage], url_path: str) -> Optional[S
         if sp.url_path.strip("/") == target:
             return sp
     return None
+
 
 def is_page_visible(page: BasePage) -> bool:
     category = get_page_category(page)
@@ -127,8 +131,12 @@ def is_page_visible(page: BasePage) -> bool:
     config = CATEGORY_CONFIG.get(category)
     if config is None:
         return False
-    
-    return page.__page_meta__.enabled and config.enabled and config.validator(cast(Any, st.session_state), page)
+
+    return (
+        page.__page_meta__.enabled
+        and config.enabled
+        and config.validator(cast(Any, st.session_state), page)
+    )
 
 
 def slugify(text: str) -> str:
@@ -163,43 +171,32 @@ def build_url_path(page: BasePage) -> str:
     if parts[-1] == "page":
         parts.pop()
 
-    return "-".join(
-        part.lower().replace("_", "-")
-        for part in parts
-    )
+    return "-".join(part.lower().replace("_", "-") for part in parts)
 
 
 def make_page_runner(page: BasePage):
-    meta = page.__page_meta__
-    
     def _runner():
-        # if meta.requires_model and not st.session_state.get(StateKey.IS_MODEL_READY, False):
-        #     st.error(f"⛔ AKSES DITOLAK: Halaman `{meta.menu_name}` Terkunci")
-        #     st.warning("Anda harus melatih atau memuat model terlebih dahulu di menu Modeling.")
-        #     st.stop()
-        page.run()
+        page()
 
     return _runner
 
+
 def main():
     loader = PageLoader(pages_dir="src/app_pages")
-    
+
     page_instances: list[BasePage] = [
-        page
-        for page in loader.load_pages()
-        if is_page_visible(page)
+        page for page in loader.load_pages() if is_page_visible(page)
     ]
 
     if not page_instances:
-        st.error("Folder `app_pages/` belum memiliki file `.py` yang menggunakan `@Options`.")
+        st.error(
+            "Folder `app_pages/` belum memiliki file `.py` yang menggunakan `@Options`."
+        )
         return
 
     # # Urutan kategori sesuai CATEGORY_CONFIG
-    category_order = {
-        category: index
-        for index, category in enumerate(CATEGORY_CONFIG)
-    }
-    
+    category_order = {category: index for index, category in enumerate(CATEGORY_CONFIG)}
+
     page_instances.sort(
         key=lambda page: (
             0 if get_page_category(page) is None else 1,
@@ -210,7 +207,6 @@ def main():
             page.__page_meta__.page_name.lower(),
         )
     )
-    
 
     # Build Streamlit pages
     # Build Streamlit pages and lookup dictionary
@@ -219,7 +215,7 @@ def main():
 
     for index, page in enumerate(page_instances):
         meta = page.__page_meta__
-        
+
         page.on_start()
 
         url_path = build_url_path(page)
@@ -232,10 +228,9 @@ def main():
 
         st_pages.append(st_page)
         page_lookup[index] = st_page
-        
-    
+
     pg = st.navigation(st_pages, position="hidden")
-    
+
     # ===== Sidebar =====
 
     st.sidebar.title("🎮 Navigasi Menu")
@@ -243,7 +238,7 @@ def main():
         '<div style="padding-bottom: 4px;"></div>',
         unsafe_allow_html=True,
     )
-    
+
     with st.sidebar.expander("📊 Pipeline Status", expanded=True):
         pipeline_steps = [
             ("1. Pengumpulan Data", StageKey.STAGE_1, "/app-dataset"),
@@ -271,7 +266,7 @@ def main():
                 )
             else:
                 st.markdown(f"&nbsp;&nbsp;{icon} {label}", unsafe_allow_html=True)
-        
+
     st.sidebar.markdown(
         '<div class="sidebar-divider"></div>',
         unsafe_allow_html=True,
@@ -315,5 +310,6 @@ def main():
 
     pg.run()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

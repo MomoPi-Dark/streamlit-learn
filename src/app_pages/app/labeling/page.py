@@ -1,7 +1,12 @@
 import streamlit as st
 import pandas as pd
 
-from lib.paths import ULASAN_LABELED_CSV_PATH, ULASAN_RAW_CSV_PATH, SLANG_CSV_PATH, CSV_DIR
+from lib.paths import (
+    ULASAN_LABELED_CSV_PATH,
+    ULASAN_RAW_CSV_PATH,
+    SLANG_CSV_PATH,
+    CSV_DIR,
+)
 from lib.enum import StateKey, StageKey, set_session_state
 from lib.config import REQUIRED_COLUMNS, required_columns
 from structures.base import BasePage, Options
@@ -16,27 +21,25 @@ from structures.base import BasePage, Options
 class AppPage(BasePage):
     def on_start(self) -> None:
         set_session_state(StageKey.STAGE_2, False)
-           
+
         if self._validate_requirements():
-            return   
-        
+            return
+
         if not ULASAN_LABELED_CSV_PATH.exists():
             return
-            
+
         set_session_state(StageKey.STAGE_2, True)
-           
-    
+
     def run(self) -> None:
         warning = self._validate_requirements()
-        
+
         st.title("🏷️ Pelabelan Data")
         st.caption(
             "Halaman ini melakukan pelabelan sentimen secara otomatis berdasarkan rating ulasan Google Play Store. "
             "Rating 4–5 diberi label **Positif**, sedangkan rating 1–2 diberi label **Negatif**. "
             "Ulasan dengan rating 3 tidak digunakan dalam proses pelabelan."
         )
-        st.info(
-            """
+        st.info("""
             **Tahap 2 - Pelabelan Data**
 
             Melakukan pelabelan sentimen secara otomatis berdasarkan rating ulasan.
@@ -46,26 +49,27 @@ class AppPage(BasePage):
             - ⭐ Rating 4–5 → **Positif**
 
             Dataset hasil pelabelan akan disimpan sebagai dataset baru dan digunakan pada tahap **Preprocessing**.
-            """
-        )
-    
+            """)
+
         if warning:
             st.warning(
                 "### ⚠️ Persyaratan belum terpenuhi untuk Labeling\n\n"
                 + "\n".join(f"- {msg}" for msg in warning)
             )
-        
+
         st.markdown("---")
-        
+
         if self._validate_requirements():
-            st.error("🚫 Data belum siap. Selesaikan persyaratan di atas terlebih dahulu sebelum melanjutkan ke Labeling.")
+            st.error(
+                "🚫 Data belum siap. Selesaikan persyaratan di atas terlebih dahulu sebelum melanjutkan ke Labeling."
+            )
             st.stop()
 
         if ULASAN_LABELED_CSV_PATH.exists():
             self._render_existing_dataset()
         else:
             self._render_labeling()
-            
+
     def _render_existing_dataset(self) -> None:
         df = pd.read_csv(ULASAN_LABELED_CSV_PATH)
 
@@ -88,11 +92,8 @@ class AppPage(BasePage):
                 (df["sentimen_label"] == "Negatif").sum(),
             )
         with col4:
-            st.metric(
-                "File",
-                ULASAN_LABELED_CSV_PATH.name
-            )
-    
+            st.metric("File", ULASAN_LABELED_CSV_PATH.name)
+
         st.dataframe(
             df[REQUIRED_COLUMNS],
             width="stretch",
@@ -110,10 +111,10 @@ class AppPage(BasePage):
 
         with st.expander("🔄 Pelabelan Ulang"):
             self._render_labeling()
-            
+
     def _render_labeling(self) -> None:
-        warning = self._validate_requirements() 
-        
+        warning = self._validate_requirements()
+
         df_raw = pd.read_csv(ULASAN_RAW_CSV_PATH)
 
         if not self._validate_columns(
@@ -150,7 +151,7 @@ class AppPage(BasePage):
             st.success("✅ Dataset berhasil dilabeli.")
 
             st.rerun()
-          
+
     def _label_dataset(self, df_raw: pd.DataFrame) -> pd.DataFrame:
         progress = st.progress(0)
         status = st.empty()
@@ -189,8 +190,8 @@ class AppPage(BasePage):
         progress.progress(1.0)
         status.success("✅ Pelabelan selesai")
 
-        return df     
-            
+        return df
+
     def _validate_columns(
         self,
         df: pd.DataFrame,
@@ -210,18 +211,22 @@ class AppPage(BasePage):
             return False
 
         return True
-    
+
     def _validate_requirements(self) -> list[str] | None:
         errors: list[str] = []
-        
+
         # Dataset
         if not ULASAN_RAW_CSV_PATH.exists():
-            errors.append("📄 Dataset belum tersedia. Silakan lakukan scraping atau upload dataset.")
+            errors.append(
+                "📄 Dataset belum tersedia. Silakan lakukan scraping atau upload dataset."
+            )
         else:
             try:
                 df = pd.read_csv(ULASAN_RAW_CSV_PATH, nrows=5)
             except Exception:
-                errors.append("📄 Dataset tidak dapat dibaca. Silakan lakukan scraping ulang.")
+                errors.append(
+                    "📄 Dataset tidak dapat dibaca. Silakan lakukan scraping ulang."
+                )
             else:
                 missing = required_columns - set(df.columns)
 
@@ -237,5 +242,5 @@ class AppPage(BasePage):
 
         if errors:
             return errors
-        
+
         return None
