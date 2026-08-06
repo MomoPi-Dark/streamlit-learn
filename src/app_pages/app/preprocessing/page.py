@@ -551,6 +551,13 @@ class AppPage(BasePage):
                             "preview_rows": df.iloc[max(0, i - preview_size):i][[input_col, output_col]].reset_index(drop=True),
                         })
 
+                if label == "Stemming":
+                    # Filter out empty rows after stemming
+                    df.dropna(subset=[output_col], inplace=True)
+                    df = df[df[output_col].astype(str).str.strip() != ""].copy()
+                    total_rows = len(df)
+
+
             # PENTING: blok ini di LUAR kedua loop (for step_idx & for i, idx),
             # supaya "finished": True hanya ditulis SEKALI, setelah SEMUA step
             # dan SEMUA baris selesai diproses -- bukan setiap iterasi baris.
