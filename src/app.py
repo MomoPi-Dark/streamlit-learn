@@ -13,6 +13,7 @@ from structures.base import BasePage
 from lib.category_config import CategoryConfig, CATEGORY_CONFIG
 from streamlit.navigation.page import StreamlitPage
 from lib.enum import load_session_state
+from lib.running_badge import mark_pages_reloaded
 
 load_session_state()
 
@@ -181,11 +182,38 @@ def make_page_runner(page: BasePage):
     return _runner
 
 
-def main():
-    loader = PageLoader(pages_dir="src/app_pages")
+def get_pages_version() -> str:
+    pages_dir = Path("src/app_pages")
 
+    if not pages_dir.exists():
+        return ""
+
+    parts: list[str] = []
+
+    for file in sorted(pages_dir.rglob("*.py")):
+        parts.append(f"{file.relative_to(pages_dir)}:{file.stat().st_mtime_ns}")
+
+    return "|".join(parts)
+
+
+@st.cache_resource
+def get_page_classes(version: str):
+    loader = PageLoader("src/app_pages")
+    classes = loader.load_page_classes()
+    mark_pages_reloaded()
+    return classes
+
+
+def create_page_instances() -> list[BasePage]:
+    version = get_pages_version()
+    page_classes = get_page_classes(version)
+
+    return [cls() for cls in page_classes]
+
+
+def main():
     page_instances: list[BasePage] = [
-        page for page in loader.load_pages() if is_page_visible(page)
+        page for page in create_page_instances() if is_page_visible(page)
     ]
 
     if not page_instances:

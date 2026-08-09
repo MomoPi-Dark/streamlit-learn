@@ -72,6 +72,12 @@ class AppPage(BasePage):
 
         st.markdown("---")
 
+        if warning:
+            st.error(
+                "🚫 Data belum siap. Selesaikan persyaratan di atas terlebih dahulu sebelum melanjutkan ke Evaluation."
+            )
+            st.stop()
+
         all_exist = WORD_FREQ_IMAGE_PATH.exists() and all(
             WORDCLOUD_IMAGE_PATH_TEMPLATE(label).exists() for label in SENTIMENT_LABELS
         )
@@ -275,13 +281,12 @@ class AppPage(BasePage):
     def _validate_requirements(self) -> list[str] | None:
         warnings: list[str] = []
 
-        if not PREPROCESSED_CSV_PATH.exists():
+        if not PREPROCESSED_CSV_PATH.exists() or not get_session_state(
+            StageKey.STAGE_3
+        ):
             warnings.append("🧹 Dataset hasil preprocessing belum tersedia.")
 
-        if not MODEL_PATH.exists():
-            warnings.append("🤖 Model belum dilatih.")
-
-        if not get_session_state(StageKey.STAGE_7):
+        if not MODEL_PATH.exists() or not get_session_state(StageKey.STAGE_7):
             warnings.append("🤖 Tahap Training Model belum selesai.")
 
         if not X_TEST_PATH.exists() or not Y_TEST_PATH.exists():

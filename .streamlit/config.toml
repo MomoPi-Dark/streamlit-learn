@@ -1,0 +1,23 @@
+[server]
+# Otomatis rerun app tiap kali file .py disimpan
+runOnSave = true
+headless = true
+
+address = "0.0.0.0"
+port = 3000
+
+# "auto" = pakai watchdog kalau terinstall, fallback ke polling kalau tidak
+fileWatcherType = "poll"
+
+# Nonaktifkan CORS check saat development lokal (opsional, aman untuk dev)
+enableCORS = false
+
+# Nonaktifkan XSRF protection saat development lokal (opsional)
+enableXsrfProtection = false
+
+[browser]
+# Matikan pengumpulan usage stats Streamlit (opsional, privasi)
+gatherUsageStats = false
+
+[logger]
+# Level log: "error", "warning", "info", "debug"

@@ -7,11 +7,13 @@ from google_play_scraper import reviews, Sort
 from lib.enum import StateKey, StageKey, StageCollect
 from lib.paths import ULASAN_RAW_CSV_PATH, CSV_DIR, clear_downstream_artifacts
 from lib.config import REQUIRED_COLUMNS, required_columns
+from lib.translate import detect_lang, translate_series
 from structures.base import BasePage, Options
 from lib.enum import set_session_state, get_session_state
 from lib.paths import SLANG_CSV_PATH
 
 APP_ID = "com.hottagames.nte"
+CONTENT_COLUMN = "content"
 
 
 @Options(
@@ -29,7 +31,7 @@ class AppPage(BasePage):
             return
 
         with open(ULASAN_RAW_CSV_PATH, encoding="utf-8") as f:
-            st.session_state[StageCollect.DATASET_COUNT] = sum(1 for _ in f) - 1
+            set_session_state(StageCollect.DATASET_COUNT, sum(1 for _ in f) - 1)
 
         set_session_state(StageKey.STAGE_1_DATASET, True)
 
@@ -151,6 +153,17 @@ class AppPage(BasePage):
                         )
                         return
 
+            translate_scrape = st.checkbox(
+                "🌐 Translate ulasan berbahasa Inggris ke Indonesia",
+                value=False,
+                key=f"translate_scrape_{force}",
+                help=(
+                    "Mendeteksi ulasan yang tertulis dalam Bahasa Inggris lalu "
+                    "menerjemahkannya ke Bahasa Indonesia agar konsisten dengan "
+                    "pipeline preprocessing (Sastrawi)."
+                ),
+            )
+
             button_label = "🔄 Scraping Ulang" if force else "🚀 Mulai Scraping"
 
             if st.button(
@@ -182,6 +195,11 @@ class AppPage(BasePage):
                         "Coba lagi, periksa koneksi, atau perlebar rentang tanggal."
                     )
                     return
+
+                if translate_scrape:
+                    df_raw = self._translate_dataframe(
+                        df_raw, progress_bar, status_text
+                    )
 
                 CSV_DIR.mkdir(parents=True, exist_ok=True)
                 df_raw.to_csv(ULASAN_RAW_CSV_PATH, index=False)
@@ -223,7 +241,7 @@ class AppPage(BasePage):
                 "Pilih file CSV",
                 type=["csv"],
                 help=f"Kolom wajib: {', '.join(REQUIRED_COLUMNS)}",
-                key=f"upload_csv_{st.session_state[StateKey.UPLOAD_KEY]}",
+                key=f"upload_csv_{get_session_state(StateKey.UPLOAD_KEY)}",
             )
 
             if uploaded_file is not None:
@@ -258,7 +276,34 @@ class AppPage(BasePage):
                     return
 
                 st.success(f"✅ Dataset valid ({len(df)} data)")
+
+                # ===== Deteksi bahasa dataset (sample) untuk kasih rekomendasi =====
+                sample = df[CONTENT_COLUMN].dropna().astype(str).head(20).tolist()
+                detected_langs = [detect_lang(t) for t in sample if t.strip()]
+                en_ratio = (
+                    detected_langs.count("en") / len(detected_langs)
+                    if detected_langs
+                    else 0
+                )
+
+                if en_ratio >= 0.5:
+                    st.warning(
+                        f"🌐 Terdeteksi ±{en_ratio * 100:.0f}% ulasan (sampel) berbahasa "
+                        "Inggris. Disarankan aktifkan opsi translate di bawah agar "
+                        "konsisten dengan pipeline preprocessing (Sastrawi)."
+                    )
+
                 st.dataframe(df, width="stretch")
+
+            translate_upload = st.checkbox(
+                "🌐 Translate ulasan berbahasa Inggris ke Indonesia",
+                value=False,
+                key=f"translate_upload_{force}",
+                help=(
+                    "Mendeteksi ulasan yang tertulis dalam Bahasa Inggris lalu "
+                    "menerjemahkannya ke Bahasa Indonesia sebelum disimpan."
+                ),
+            )
 
             with st.form("upload_dataset_form", clear_on_submit=True):
                 submit = st.form_submit_button(
@@ -272,17 +317,57 @@ class AppPage(BasePage):
                     st.error("Silakan pilih file CSV terlebih dahulu.")
                     return
 
+                if translate_upload:
+                    progress_bar = st.progress(0.0)
+                    status_text = st.empty()
+                    df = self._translate_dataframe(df, progress_bar, status_text)
+
                 CSV_DIR.mkdir(parents=True, exist_ok=True)
                 df.to_csv(ULASAN_RAW_CSV_PATH, index=False)
 
-                # Dataset mentah berubah -> semua hasil olahan lama (labeling,
-                # preprocessing, TF-IDF, split) sudah tidak valid dan harus dihapus.
                 clear_downstream_artifacts()
 
                 st.success("✅ Dataset berhasil disimpan.")
 
-                st.session_state[StateKey.UPLOAD_KEY] += 1
+                # st.session_state[StateKey.UPLOAD_KEY] += 1
+                set_session_state(StateKey.UPLOAD_KEY, +1)
                 st.rerun()
+
+    @staticmethod
+    def _translate_dataframe(
+        df: pd.DataFrame,
+        progress_bar,
+        status_text,
+    ) -> pd.DataFrame:
+        """Translate kolom `content` (EN -> ID) dan tampilkan progres + ringkasan."""
+        if CONTENT_COLUMN not in df.columns:
+            return df
+
+        status_text.info("🌐 Menerjemahkan ulasan berbahasa Inggris ke Indonesia...")
+
+        def on_progress(current: int, total: int) -> None:
+            progress_bar.progress(min(current / total, 1.0) if total else 1.0)
+            status_text.text(f"Menerjemahkan: {current}/{total} baris...")
+
+        translated_series, stats = translate_series(
+            df[CONTENT_COLUMN],
+            source="en",
+            target="id",
+            only_detected_source=True,
+            progress_callback=on_progress,
+        )
+
+        df = df.copy()
+        df[CONTENT_COLUMN] = translated_series
+
+        status_text.success(
+            f"✅ Translate selesai — {stats['translated']} diterjemahkan, "
+            f"{stats['skipped']} dilewati (bukan Inggris/kosong), "
+            f"{stats['failed']} gagal (tetap teks asli)."
+        )
+        progress_bar.progress(1.0)
+
+        return df
 
     @staticmethod
     def _scrape_reviews(

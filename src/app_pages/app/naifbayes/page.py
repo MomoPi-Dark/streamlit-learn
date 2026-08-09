@@ -8,7 +8,7 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.metrics import accuracy_score
 
 from structures.base import BasePage, Options
-from lib.enum import StageKey, get_session_state, set_session_state
+from lib.enum import StageKey, StageCollect, get_session_state, set_session_state
 from lib.paths import (
     X_TRAIN_PATH,
     Y_TRAIN_PATH,
@@ -46,9 +46,10 @@ def _load_train_data():
 class AppPage(BasePage):
 
     def on_start(self) -> None:
-        # STAGE_7 = True hanya jika model benar-benar sudah dilatih
-        # dan tersimpan di disk — bukan sekadar prasyarat terpenuhi.
-        set_session_state(StageKey.STAGE_7, MODEL_PATH.exists())
+        is_ready = MODEL_PATH.exists()
+
+        set_session_state(StageKey.STAGE_7, is_ready)
+        set_session_state(StageCollect.MODEL_READY, is_ready)
 
     def run(self) -> None:
         warning = self._validate_requirements()

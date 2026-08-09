@@ -1,13 +1,12 @@
 import streamlit as st
 import pandas as pd
 import re
+import html
 import threading
 import time
-import uuid
+from collections import deque
 from datetime import datetime
 from functools import lru_cache
-
-from streamlit.runtime.scriptrunner import add_script_run_ctx
 
 from lib.paths import (
     ULASAN_LABELED_CSV_PATH,
@@ -30,6 +29,9 @@ from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
 from Sastrawi.Dictionary.ArrayDictionary import ArrayDictionary
 from Sastrawi.StopWordRemover.StopWordRemover import StopWordRemover
+
+from lib.bgManager import background_manager
+from lib.running_badge import render_status_badges
 
 RE_URL = re.compile(r"http\S+|www\S+")
 RE_MENTION_HASHTAG = re.compile(r"@\w+|#\w+")
@@ -60,14 +62,11 @@ REQUIRED_COLUMNS = [
 required_columns = set(REQUIRED_COLUMNS)
 
 # ===== Objek berat di-init sekali di module level =====
-# Supaya cache stemming & instance stemmer/stopword-remover konsisten
-# lintas rerun Streamlit maupun lintas thread (bukan re-create tiap kali
-# AppPage di-instantiate ulang).
 _stopword_factory = StopWordRemoverFactory()
 _stopwords = sorted(
     set(_stopword_factory.get_stop_words())
-    | set(index.load_stopwords())
-    | {"nya", "di"}
+    # | set(index.load_stopwords())
+    | set({"nya", "di", "bugil"})
 )
 _dictionary = ArrayDictionary(_stopwords)
 _stopword_remover = StopWordRemover(_dictionary)
@@ -76,59 +75,112 @@ _stemmer = StemmerFactory().create_stemmer()
 
 @lru_cache(maxsize=200_000)
 def _stem_word_cached(word: str) -> str:
-    """Stemming satu kata, di-cache di level module (bukan instance),
-    supaya cache tetap kepakai lintas rerun & lintas thread."""
     return _stemmer.stem(word)
 
 
-# ===== Progress store MANDIRI, terpisah dari st.session_state =====
-# Background thread TIDAK BOLEH menulis progress lewat st.session_state,
-# karena itu terikat ke ScriptRunContext yang bisa "ditandai stop" saat
-# terjadi rerun (manual atau via st.fragment run_every) -- penulisan ke
-# session_state dari thread lain saat itu terjadi akan melempar
-# streamlit.runtime.scriptrunner_utils.exceptions.StopException yang
-# TIDAK bisa ditangkap oleh `except Exception` biasa (dia turunan
-# BaseException), sehingga background thread mati diam-diam.
-#
-# Solusi: progress disimpan di dictionary module-level biasa, dilindungi
-# lock, sama sekali tidak bergantung pada context Streamlit.
-_progress_lock = threading.Lock()
-
-
-def _get_progress_store() -> dict:
-    """
-    Dictionary progress disimpan SEBAGAI OBJEK di dalam st.session_state
-    (dibuat sekali, lalu dimutasi langsung -- bukan di-assign ulang lewat
-    st.session_state[key] = ...). Ini menghindari dua masalah sekaligus:
-    1. Tidak bergantung pada modul Python tetap sama objeknya lintas rerun
-       (aman walau ada mekanisme reimport/reload halaman di router custom).
-    2. Mutasi dict langsung (d[k]=v) TIDAK melewati SafeSessionState.__setitem__,
-       jadi tetap aman dipanggil dari background thread tanpa risiko
-       StopException.
-    """
-    store = st.session_state.get("_progress_store_obj")
-    if store is None:
-        store = {}
-        st.session_state["_progress_store_obj"] = store
-    return store
-
-
-def _progress_set(store_key: str, value: dict) -> None:
-    with _progress_lock:
-        store = _get_progress_store()
-        store[store_key] = value
-
-
-def _progress_get(store_key: str) -> dict | None:
-    with _progress_lock:
-        store = _get_progress_store()
-        return store.get(store_key)
-
-
-def _progress_delete(store_key: str) -> None:
-    with _progress_lock:
-        store = _get_progress_store()
-        store.pop(store_key, None)
+slang_dict = {
+    "indo": "indonesia",
+    "cn": "china",
+    "gak": "tidak",
+    "ga": "tidak",
+    "gk": "tidak",
+    "tdk": "tidak",
+    "nggak": "tidak",
+    "ngga": "tidak",
+    "kagak": "tidak",
+    "gabisa": "tidak bisa",
+    "gaada": "tidak ada",
+    "gajelas": "tidak jelas",
+    "gamau": "tidak mau",
+    "ckp": "cukup",
+    "bgt": "banget",
+    "yg": "yang",
+    "utk": "untuk",
+    "tlg": "tolong",
+    "dr": "dari",
+    "jd": "jadi",
+    "jgn": "jangan",
+    "udh": "sudah",
+    "udah": "sudah",
+    "blm": "belum",
+    "sm": "sama",
+    "sy": "saya",
+    "aja": "saja",
+    "dgn": "dengan",
+    "tp": "tapi",
+    "gmn": "bagaimana",
+    "gimana": "bagaimana",
+    "pgn": "pengen",
+    "pengen": "ingin",
+    "mksd": "maksud",
+    "mksdnya": "maksudnya",
+    "jg": "juga",
+    "krn": "karena",
+    "knp": "kenapa",
+    "klo": "kalau",
+    "kalo": "kalau",
+    "gtu": "begitu",
+    "gitu": "begitu",
+    "skrg": "sekarang",
+    "skrng": "sekarang",
+    "trs": "terus",
+    "dpt": "dapat",
+    "liat": "lihat",
+    "pake": "pakai",
+    "bikin": "membuat",
+    "nih": "ini",
+    "bnyk": "banyak",
+    "org": "orang",
+    "bs": "bisa",
+    "bsk": "besok",
+    "emg": "memang",
+    "emang": "memang",
+    "pny": "punya",
+    "gpp": "tidak apa-apa",
+    "gapapa": "tidak apa-apa",
+    "bgs": "bagus",
+    "mantul": "mantap betul",
+    "parah": "sangat",
+    "ribet": "rumit",
+    "gw": "saya",
+    "gue": "saya",
+    "lu": "kamu",
+    "lo": "kamu",
+    "sbnrnya": "sebenarnya",
+    "sbnernya": "sebenarnya",
+    "bbrp": "beberapa",
+    "stlh": "setelah",
+    "sblm": "sebelum",
+    "msh": "masih",
+    "trnyt": "ternyata",
+    "wkt": "waktu",
+    "ngelag": "lag",
+    "lagging": "lag",
+    "ngebug": "bug",
+    "ngehang": "macet",
+    "fc": "force close",
+    "maintenance": "pemeliharaan",
+    "dc": "disconnect",
+    "connect": "tersambung",
+    "lemot": "lambat",
+    "berat": "lambat",
+    "crash": "berhenti mendadak",
+    "restart": "mulai ulang",
+    "gacha": "gacha",
+    "p2w": "pay to win",
+    "f2p": "free to play",
+    "op": "overpowered",
+    "nerf": "pelemahan",
+    "buff": "penguatan",
+    "event": "acara",
+    "update": "pembaruan",
+    "maintenence": "pemeliharaan",
+    "sultan": "pemain berdompet tebal",
+    "noob": "pemain baru",
+    "cheat": "kecurangan",
+    "glitch": "bug",
+    "respawn": "muncul ulang",
+}
 
 
 # ===== Bobot relatif tiap step (estimasi beban komputasi) =====
@@ -141,6 +193,15 @@ STEP_WEIGHTS = {
     "Tokenizing": 1,
 }
 
+STEP_ICONS = {
+    "Case Folding": "🔤",
+    "Cleaning": "🧹",
+    "Normalisasi": "📚",
+    "Stopword Removal": "🚫",
+    "Stemming": "🌱",
+    "Tokenizing": "🔠",
+}
+
 PREPROCESSING_STEPS_META = [
     ("Case Folding", "ulasan", "ulasan_case_folding"),
     ("Cleaning", "ulasan_case_folding", "ulasan_cleaning"),
@@ -150,6 +211,234 @@ PREPROCESSING_STEPS_META = [
     ("Tokenizing", "clean_ulasan", "tokenizing"),
 ]
 
+SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
+# jumlah baris contoh yang dilacak untuk tabel "pipeline lengkap"
+PIPELINE_SAMPLE_SIZE = 3
+# jumlah baris terakhir yang ditampilkan di tabel "sedang diproses" (live)
+LIVE_SAMPLE_SIZE = 5
+
+_MAX_DISPLAY_CHARS = 70
+
+
+def _format_sample_value(value) -> str:
+    """Ubah nilai (termasuk list hasil tokenizing) jadi teks singkat untuk tabel."""
+    if isinstance(value, list):
+        text = ", ".join(str(v) for v in value)
+    elif value is None or (not isinstance(value, (list, dict)) and pd.isna(value)):
+        text = ""
+    else:
+        text = str(value)
+
+    text = text.strip()
+    if len(text) > _MAX_DISPLAY_CHARS:
+        text = text[: _MAX_DISPLAY_CHARS - 1] + "…"
+    return text if text else "(kosong)"
+
+
+def _esc(value) -> str:
+    """Escape teks sebelum disisipkan ke HTML supaya aman & tidak merusak layout."""
+    return html.escape(str(value), quote=True)
+
+
+# ===== CSS kustom (di-inject sekali per full page render) =====
+_CUSTOM_CSS = """
+<style>
+.pp-card {
+    background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01));
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 20px 24px;
+    margin-bottom: 16px;
+}
+.pp-banner {
+    display: flex; align-items: center; gap: 10px;
+    border-radius: 12px; border: 1px solid transparent;
+    padding: 12px 16px; font-weight: 600; font-size: 0.95em;
+    margin-bottom: 18px;
+}
+.pp-banner.info {
+    background: linear-gradient(90deg, rgba(99,102,241,0.16), rgba(56,189,248,0.08));
+    border-color: rgba(99,102,241,0.35); color: #c7d2fe;
+}
+.pp-banner.success {
+    background: linear-gradient(90deg, rgba(74,222,128,0.18), rgba(34,197,94,0.08));
+    border-color: rgba(74,222,128,0.4); color: #bbf7d0;
+}
+.pp-banner.warning {
+    background: linear-gradient(90deg, rgba(251,191,36,0.18), rgba(245,158,11,0.08));
+    border-color: rgba(251,191,36,0.4); color: #fde68a;
+}
+.pp-banner-icon { font-size: 1.15em; line-height: 1; }
+.pp-banner-icon.spin { display: inline-block; animation: pp-spin 1.6s linear infinite; }
+
+@keyframes pp-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+.pp-stepper {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    margin: 4px 0 22px 0; position: relative;
+}
+.pp-step {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    position: relative; z-index: 1; padding: 0 4px;
+}
+.pp-step:not(:first-child)::before {
+    content: ""; position: absolute; top: 23px; left: -50%; width: 100%; height: 3px;
+    background: rgba(255,255,255,0.08); z-index: -1; border-radius: 2px;
+}
+.pp-step.done:not(:first-child)::before {
+    background: linear-gradient(90deg, #22c55e, #38bdf8);
+}
+.pp-step-badge {
+    width: 46px; height: 46px; border-radius: 50%; position: relative;
+    display: flex; align-items: center; justify-content: center; font-size: 20px;
+    background: rgba(255,255,255,0.06); border: 2px solid rgba(255,255,255,0.14);
+    transition: all .35s ease;
+}
+.pp-step.done .pp-step-badge {
+    background: rgba(74,222,128,0.16); border-color: #22c55e;
+}
+.pp-step.active .pp-step-badge {
+    background: rgba(56,189,248,0.2); border-color: #38bdf8;
+    animation: pp-pulse 1.5s ease-in-out infinite;
+}
+@keyframes pp-pulse {
+    0%, 100% { box-shadow: 0 0 0 4px rgba(56,189,248,0.10); }
+    50% { box-shadow: 0 0 0 11px rgba(56,189,248,0.16); }
+}
+.pp-step.pending .pp-step-badge { opacity: 0.4; }
+.pp-step-check {
+    position: absolute; top: -3px; right: -3px; width: 17px; height: 17px;
+    background: #22c55e; color: #0e1117; border-radius: 50%; font-size: 10px;
+    font-weight: 900; display: flex; align-items: center; justify-content: center;
+}
+.pp-step-label { margin-top: 8px; font-size: 0.76em; text-align: center; color: #cbd5e1; }
+.pp-step.active .pp-step-label { color: #38bdf8; font-weight: 700; }
+.pp-step.done .pp-step-label { color: #4ade80; }
+.pp-step.pending .pp-step-label { opacity: 0.45; }
+
+.pp-progress-outer {
+    background: rgba(255,255,255,0.08); border-radius: 999px; height: 14px;
+    overflow: hidden; position: relative;
+}
+.pp-progress-inner {
+    height: 100%; border-radius: 999px;
+    background: linear-gradient(90deg, #6366f1, #38bdf8, #6366f1);
+    background-size: 200% 100%;
+    animation: pp-shimmer 2.2s linear infinite;
+    transition: width .4s ease;
+}
+@keyframes pp-shimmer { 0% { background-position: 0 0; } 100% { background-position: 200% 0; } }
+.pp-progress-label {
+    display: flex; justify-content: space-between; font-size: 0.8em;
+    color: #94a3b8; margin-top: 6px;
+}
+
+.pp-section-title {
+    font-size: 0.95em; font-weight: 700; color: #e2e8f0;
+    display: flex; align-items: center; gap: 6px; margin-bottom: 2px;
+}
+.pp-section-caption { font-size: 0.78em; color: #94a3b8; margin-bottom: 12px; }
+
+.pp-table { width: 100%; border-collapse: collapse; font-size: 0.83em; }
+.pp-table th {
+    text-align: left; padding: 8px 10px; background: rgba(255,255,255,0.045);
+    color: #94a3b8; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.pp-table td {
+    padding: 9px 10px; border-bottom: 1px solid rgba(255,255,255,0.05);
+    color: #e2e8f0; vertical-align: top;
+}
+.pp-table tr:last-child td { border-bottom: none; }
+.pp-table tr:hover td { background: rgba(255,255,255,0.03); }
+.pp-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.94em; }
+.pp-arrow-cell { text-align: center; color: #38bdf8; width: 28px; }
+.pp-pending-cell { color: #475569; font-style: italic; }
+</style>
+"""
+
+
+def _inject_custom_css() -> None:
+    st.markdown(_CUSTOM_CSS, unsafe_allow_html=True)
+
+
+def _banner_html(icon: str, text: str, kind: str = "info", spin: bool = False) -> str:
+    spin_cls = " spin" if spin else ""
+    return (
+        f"<div class='pp-banner {kind}'>"
+        f"<span class='pp-banner-icon{spin_cls}'>{icon}</span>"
+        f"<span>{_esc(text)}</span>"
+        "</div>"
+    )
+
+
+def _render_stepper_html(step_index: int) -> str:
+    parts = ["<div class='pp-stepper'>"]
+    for i, (label, _, _) in enumerate(PREPROCESSING_STEPS_META, start=1):
+        icon = STEP_ICONS[label]
+        if i < step_index:
+            state, check = "done", "<span class='pp-step-check'>✓</span>"
+        elif i == step_index:
+            state, check = "active", ""
+        else:
+            state, check = "pending", ""
+        parts.append(
+            f"<div class='pp-step {state}'>"
+            f"<div class='pp-step-badge'>{icon}{check}</div>"
+            f"<div class='pp-step-label'>{_esc(label)}</div>"
+            "</div>"
+        )
+    parts.append("</div>")
+    return "".join(parts)
+
+
+def _render_progress_bar_html(percent: float, label_text: str) -> str:
+    pct = max(0.0, min(100.0, percent))
+    return (
+        f"<div class='pp-progress-outer'><div class='pp-progress-inner' "
+        f"style='width:{pct:.1f}%;'></div></div>"
+        f"<div class='pp-progress-label'><span>{_esc(label_text)}</span>"
+        f"<span>{pct:.1f}%</span></div>"
+    )
+
+
+def _render_pipeline_table_html(rows: list[dict]) -> str:
+    if not rows:
+        return ""
+    columns = list(rows[0].keys())
+    thead = "".join(f"<th>{_esc(c)}</th>" for c in columns)
+    body = []
+    for row in rows:
+        cells = []
+        for col in columns:
+            val = row.get(col, "—")
+            cls = "pp-pending-cell" if val == "—" else "pp-mono"
+            cells.append(f"<td class='{cls}'>{_esc(val)}</td>")
+        body.append(f"<tr>{''.join(cells)}</tr>")
+    return (
+        f"<table class='pp-table'><thead><tr>{thead}</tr></thead>"
+        f"<tbody>{''.join(body)}</tbody></table>"
+    )
+
+
+def _render_live_table_html(rows: list[dict], current_step: str) -> str:
+    if not rows:
+        return ""
+    body = []
+    for row in rows:
+        before = _esc(row.get("before", ""))
+        after = _esc(row.get("after", ""))
+        body.append(
+            f"<tr><td class='pp-mono'>{before}</td>"
+            f"<td class='pp-arrow-cell'>→</td>"
+            f"<td class='pp-mono'>{after}</td></tr>"
+        )
+    return (
+        "<table class='pp-table'><thead><tr>"
+        f"<th>Sebelum</th><th></th><th>Sesudah — {_esc(current_step)}</th>"
+        f"</tr></thead><tbody>{''.join(body)}</tbody></table>"
+    )
+
 
 @Options(
     page_name="preprocessing",
@@ -158,6 +447,8 @@ PREPROCESSING_STEPS_META = [
     category="preprocessing",
 )
 class AppPage(BasePage):
+    _session_id = "preproccessing"
+
     def on_start(self) -> None:
         set_session_state(StageKey.STAGE_3, False)
 
@@ -170,6 +461,9 @@ class AppPage(BasePage):
         set_session_state(StageKey.STAGE_3, True)
 
     def run(self) -> None:
+        render_status_badges()
+        _inject_custom_css()
+
         warning = self._validate_requirements()
 
         st.title("🧹 Preprocessing Data")
@@ -208,7 +502,9 @@ class AppPage(BasePage):
             )
             st.stop()
 
-        if PREPROCESSED_CSV_PATH.exists():
+        if PREPROCESSED_CSV_PATH.exists() and not background_manager.is_running(
+            self._session_id
+        ):
             self._render_existing_dataset()
         else:
             self._render_preprocessing()
@@ -216,7 +512,10 @@ class AppPage(BasePage):
     def _render_existing_dataset(self) -> None:
         df = pd.read_csv(PREPROCESSED_CSV_PATH)
 
-        st.success("✅ Dataset preprocessing sudah tersedia.")
+        st.markdown(
+            _banner_html("✅", "Dataset preprocessing sudah tersedia.", "success"),
+            unsafe_allow_html=True,
+        )
 
         col1, col2, col3, col4 = st.columns(4)
 
@@ -252,16 +551,16 @@ class AppPage(BasePage):
             )
             self._render_preprocessing(force=True)
 
-    def _get_session_uid(self) -> str:
-        """UID unik per session browser, dipakai sebagai prefix key di
-        _progress_store supaya antar-user/tab tidak saling tabrakan."""
-        session_uid = get_session_state("_session_uid")
-        if session_uid is None:
-            session_uid = str(uuid.uuid4())
-            set_session_state("_session_uid", session_uid)
-        return session_uid
-
     def _render_preprocessing(self, force: bool = False) -> None:
+        session_uid = self._session_id
+        running = background_manager.is_running(session_uid)
+
+        # Kalau proses lagi berjalan, langsung tampilkan animasi progress
+        # -> tidak perlu baca ulang CSV sumber setiap 0.5 detik
+        if running:
+            self._render_progress_animation()
+            return
+
         if not ULASAN_LABELED_CSV_PATH.exists():
             st.error(
                 "❌ Dataset hasil labeling belum tersedia atau sedang diproses ulang. "
@@ -279,377 +578,255 @@ class AppPage(BasePage):
             )
             return
 
-        st.info(f"Dataset siap diproses ({len(df_source):,} data).")
-
-        with st.expander("👀 Preview Dataset", expanded=False):
-            st.dataframe(df_source[REQUIRED_COLUMNS].head(10), width="stretch")
-
-        st.markdown("---")
-
-        session_uid = self._get_session_uid()
-
-        running_key = f"prep_running_{force}"
-        stop_event_key = f"prep_stopevent_{force}"
-        progress_key = f"{session_uid}:prep_progress_{force}"
-        last_seen_step_key = f"prep_last_seen_step_{force}"
-        thread_key = f"prep_thread_{force}"
-
-        is_running = bool(get_session_state(running_key))
-
-        if not is_running:
-            if st.button(
-                "🚀 Mulai Preprocessing" if not force else "🔄 Preprocessing Ulang",
-                type="primary",
-                width="stretch",
-                disabled=bool(self._validate_requirements()),
-                key=f"start_btn_{force}",
-            ):
-                stop_event = threading.Event()
-                set_session_state(stop_event_key, stop_event)
-                _progress_set(
-                    progress_key,
-                    {
-                        "step_idx": 0,
-                        "row": 0,
-                        "total_rows": len(df_source),
-                        "pct": 0.0,
-                        "finished": False,
-                        "stopped": False,
-                        "error": None,
-                        "df": None,
-                        "preview_input_col": None,
-                        "preview_output_col": None,
-                        "preview_rows": None,
-                    },
-                )
-                set_session_state(last_seen_step_key, -1)
-
-                thread = threading.Thread(
-                    target=self._run_preprocessing_background,
-                    args=(df_source.copy(), progress_key, stop_event),
-                    daemon=True,
-                )
-                add_script_run_ctx(thread)
-                thread.start()
-
-                set_session_state(thread_key, thread)
-                set_session_state(running_key, True)
-                st.toast("🚀 Preprocessing dimulai di background...", icon="🚀")
-                st.rerun()
-        else:
-            if st.button(
-                "⏹️ Stop Proses",
-                type="secondary",
-                width="stretch",
-                key=f"stop_btn_{force}",
-            ):
-                stop_event = get_session_state(stop_event_key)
-                if stop_event:
-                    stop_event.set()
-                st.toast("⏹️ Menghentikan proses...", icon="⏹️")
-
-        if not is_running:
-            return
-
-        self._render_progress_fragment(
-            force=force,
-            running_key=running_key,
-            progress_key=progress_key,
-            last_seen_step_key=last_seen_step_key,
-            thread_key=thread_key,
+        st.markdown(
+            _banner_html(
+                "📦", f"Dataset siap diproses ({len(df_source):,} data).", "info"
+            ),
+            unsafe_allow_html=True,
         )
+
+        if st.button(
+            "🚀 Mulai Preprocessing" if not force else "🔄 Preprocessing Ulang",
+            type="primary",
+            width="stretch",
+        ):
+            background_manager.start(
+                session_uid,
+                self._run_preprocessing_background,
+                df_source.copy(),
+            )
+            st.toast("🚀 Preprocessing dimulai di background...", icon="🚀")
+            st.rerun()
 
     @st.fragment(run_every=0.5)
-    def _render_progress_fragment(
-        self,
-        force: bool,
-        running_key: str,
-        progress_key: str,
-        last_seen_step_key: str,
-        thread_key: str,
-    ) -> None:
-        """
-        Fragment ini di-rerun sendiri tiap 0.5 detik TANPA menggambar ulang
-        seluruh halaman (judul, deskripsi tahap, preview dataset, dll) --
-        supaya tidak terlihat "blink". Hanya isi fragment ini yang refresh.
-        """
-        progress_data = _progress_get(progress_key) or {}
+    def _render_progress_animation(self) -> None:
+        session_uid = self._session_id
+        running = background_manager.is_running(session_uid)
+        progress = background_manager.get_progress(session_uid)
+        status = progress.get("status")
 
-        step_idx = progress_data.get("step_idx", 0)
-        row = progress_data.get("row", 0)
-        total_rows = progress_data.get("total_rows", 1)
-        pct = progress_data.get("pct", 0.0)
-        finished = progress_data.get("finished", False)
-        stopped = progress_data.get("stopped", False)
-        error = progress_data.get("error")
-        total_steps = len(PREPROCESSING_STEPS_META)
-
-        thread_obj = get_session_state(thread_key)
-        thread_dead = thread_obj is not None and not thread_obj.is_alive()
-        if error is None and thread_dead and not finished and not stopped:
-            error = "Proses berhenti tak terduga (thread mati tanpa status akhir)."
-
-        last_seen = get_session_state(last_seen_step_key)
-        if step_idx > last_seen and step_idx < total_steps:
-            label = PREPROCESSING_STEPS_META[step_idx][0]
-            st.toast(f"Memulai step: {label}", icon="⏳")
-            set_session_state(last_seen_step_key, step_idx)
-
-        status_label = (
-            "⚙️ Memproses dataset..."
-            if not finished and not stopped and not error
-            else (
-                "✅ Preprocessing selesai"
-                if finished
-                else "⏹️ Proses dihentikan" if stopped else "❌ Preprocessing gagal"
-            )
-        )
-        status_state = (
-            "running"
-            if not finished and not stopped and not error
-            else "complete" if finished else "error"
-        )
-
-        with st.status(
-            status_label, expanded=(not finished), state=status_state
-        ) as status_box:
-            cols = st.columns(total_steps)
-            for i, (col, (label, *_rest)) in enumerate(
-                zip(cols, PREPROCESSING_STEPS_META)
-            ):
-                with col:
-                    if i < step_idx or finished:
-                        st.markdown(
-                            f"<div style='text-align:center; opacity:0.55;'>"
-                            f"✅<br><span style='font-size:12px;'>{label}</span></div>",
-                            unsafe_allow_html=True,
-                        )
-                    elif i == step_idx and not stopped and not error:
-                        st.markdown(
-                            f"<div style='text-align:center;'>"
-                            f"⏳<br><span style='font-size:12px; font-weight:600; color:#3b82f6;'>{label}</span></div>",
-                            unsafe_allow_html=True,
-                        )
-                    elif i == step_idx and (stopped or error):
-                        icon = "⏹️" if stopped else "❌"
-                        color = "#ef4444"
-                        st.markdown(
-                            f"<div style='text-align:center;'>"
-                            f"{icon}<br><span style='font-size:12px; font-weight:600; color:{color};'>{label}</span></div>",
-                            unsafe_allow_html=True,
-                        )
-                    else:
-                        st.markdown(
-                            f"<div style='text-align:center; opacity:0.3;'>"
-                            f"⬜<br><span style='font-size:12px;'>{label}</span></div>",
-                            unsafe_allow_html=True,
-                        )
-
-            st.markdown("")
-
-            step_label = (
-                PREPROCESSING_STEPS_META[step_idx][0]
-                if step_idx < total_steps
-                else "Selesai"
-            )
-            st.markdown(
-                f"**{step_label}** — baris {row:,}/{total_rows:,} "
-                f"&nbsp;•&nbsp; **{pct * 100:.0f}%**"
-            )
-            st.progress(min(pct, 1.0))
-
-            preview_input_col = progress_data.get("preview_input_col")
-            preview_output_col = progress_data.get("preview_output_col")
-            preview_rows = progress_data.get("preview_rows")
-            if preview_rows is not None:
-                st.dataframe(
-                    preview_rows[[preview_input_col, preview_output_col]],
-                    width="stretch",
+        # Proses sudah tidak jalan lagi -> tentukan hasil akhirnya
+        if not running:
+            if status == "done":
+                st.markdown(
+                    _banner_html(
+                        "✅", "Preprocessing selesai! Memuat hasil...", "success"
+                    ),
+                    unsafe_allow_html=True,
                 )
-
-        if error:
-            set_session_state(running_key, False)
-            _progress_delete(progress_key)
-            st.error(f"❌ Preprocessing gagal: {error}")
-            st.rerun()
+                time.sleep(0.6)
+                st.rerun(scope="app")
+            elif status == "stopped":
+                st.markdown(
+                    _banner_html(
+                        "⏹️", "Preprocessing dihentikan oleh pengguna.", "warning"
+                    ),
+                    unsafe_allow_html=True,
+                )
+                if st.button(
+                    "🔄 Muat Ulang Halaman", key="reload_after_stop", width="stretch"
+                ):
+                    st.rerun(scope="app")
+            else:
+                # status "starting" yang belum sempat ke-update, coba lagi sebentar
+                st.rerun(scope="app")
             return
 
-        if stopped:
-            set_session_state(running_key, False)
-            st.info(
-                f"Progres tersimpan sebagian: {row:,} dari {total_rows:,} data terproses."
+        step_index = progress.get("step_index", 1)
+        total_steps = progress.get("total_steps", len(PREPROCESSING_STEPS_META))
+        current_step = progress.get("current_step", PREPROCESSING_STEPS_META[0][0])
+        row_index = progress.get("row_index", 0)
+        total_rows = progress.get("total_rows", 0)
+        percent = float(progress.get("percent", 0.0))
+        spinner = SPINNER_FRAMES[int(time.time() * 4) % len(SPINNER_FRAMES)]
+
+        # ===== Kartu utama: banner + stepper + progress bar =====
+        main_card = ["<div class='pp-card'>"]
+        main_card.append(
+            _banner_html(
+                "⚙️",
+                "Preprocessing sedang berjalan di background...",
+                "info",
+                spin=True,
             )
-            _progress_delete(progress_key)
-            st.rerun()
-            return
+        )
+        main_card.append(_render_stepper_html(step_index))
+        main_card.append(
+            _render_progress_bar_html(
+                percent,
+                f"{spinner} {current_step} — langkah {step_index}/{total_steps} "
+                f"· {row_index:,}/{total_rows:,} data",
+            )
+        )
+        main_card.append("</div>")
+        st.markdown("".join(main_card), unsafe_allow_html=True)
 
-        if finished:
-            df_result = progress_data["df"]
-
-            CSV_DIR.mkdir(parents=True, exist_ok=True)
-            df_result.to_csv(PREPROCESSED_CSV_PATH, index=False)
-
-            st.toast("Preprocessing selesai!", icon="✅")
-            st.success(f"Berhasil memproses {len(df_result):,} data.")
-            st.dataframe(df_result.head(10), width="stretch")
-
-            st.download_button(
-                label="⬇️ Download CSV",
-                data=PREPROCESSED_CSV_PATH.read_bytes(),
-                file_name=PREPROCESSED_CSV_PATH.name,
-                mime="text/csv",
-                width="stretch",
-                key=f"download_btn_result_{force}",
+        # ===== Kartu tabel 1: pipeline lengkap untuk beberapa baris contoh =====
+        pipeline_sample = progress.get("pipeline_sample")
+        if pipeline_sample:
+            st.markdown(
+                "<div class='pp-card'>"
+                "<div class='pp-section-title'>📋 Contoh Transformasi Data (Pipeline Lengkap)</div>"
+                f"<div class='pp-section-caption'>{PIPELINE_SAMPLE_SIZE} baris contoh yang sama, "
+                "dipantau dari awal sampai akhir tahap.</div>"
+                f"{_render_pipeline_table_html(pipeline_sample)}"
+                "</div>",
+                unsafe_allow_html=True,
             )
 
-            set_session_state(running_key, False)
-            _progress_delete(progress_key)
-            st.rerun()
-            return
+        # ===== Kartu tabel 2: baris yang baru saja diproses (live) =====
+        sample_rows = progress.get("sample_rows")
+        if sample_rows:
+            st.markdown(
+                "<div class='pp-card'>"
+                f"<div class='pp-section-title'>🔄 Baru Diproses — {_esc(current_step)}</div>"
+                "<div class='pp-section-caption'>5 baris terakhir yang baru saja melewati langkah ini.</div>"
+                f"{_render_live_table_html(sample_rows, current_step)}"
+                "</div>",
+                unsafe_allow_html=True,
+            )
 
-        # Masih berjalan -- TIDAK perlu time.sleep + st.rerun manual,
-        # karena run_every=0.5 pada decorator @st.fragment sudah
-        # menghandle auto-refresh khusus untuk fragment ini saja.
+        if st.button("⏹️ Stop Proses", key="stop_btn_running", width="stretch"):
+            background_manager.stop(session_uid)
+            st.rerun(scope="app")
 
     def _run_preprocessing_background(
         self,
         df: pd.DataFrame,
-        progress_key: str,
         stop_event: threading.Event,
-        update_every: int = 20,
-        preview_size: int = 10,
     ) -> None:
-        """
-        Jalan di thread terpisah. TIDAK boleh manggil st.* widget langsung
-        (unsupported) -- dan progress ditulis lewat _progress_set (dictionary
-        module-level), BUKAN lewat st.session_state / set_session_state,
-        supaya tidak kena StopException saat terjadi rerun di thread utama.
-        """
         df = df.copy()
         df["ulasan"] = df["content"]
+
+        func_map = {
+            "Case Folding": self._case_folding,
+            "Cleaning": self._cleaning,
+            "Normalisasi": self._normalisasi,
+            "Stopword Removal": self._remove_stopword,
+            "Stemming": self._stemming,
+            "Tokenizing": self._tokenize,
+        }
+
         total_rows = len(df)
+        total_steps = len(PREPROCESSING_STEPS_META)
+        total_weight = sum(
+            STEP_WEIGHTS[label] for label, _, _ in PREPROCESSING_STEPS_META
+        ) * max(total_rows, 1)
+        completed_weight = 0
 
-        try:
-            total_steps = len(PREPROCESSING_STEPS_META)
-            total_weight = sum(
-                STEP_WEIGHTS[label] for label, *_ in PREPROCESSING_STEPS_META
-            )
+        # update progress setiap ~1% data supaya animasi mulus tanpa
+        # membebani lock dengan update di setiap baris
+        update_every = max(1, total_rows // 100)
 
-            func_map = {
-                "Case Folding": self._case_folding,
-                "Cleaning": self._cleaning,
-                "Normalisasi": self._normalisasi,
-                "Stopword Removal": self._remove_stopword,
-                "Stemming": self._stemming,
-                "Tokenizing": self._tokenize,
-            }
+        # ===== Baris contoh untuk tabel "pipeline lengkap" =====
+        # dipilih sekali di awal (posisi pertama) supaya konsisten dilacak
+        # dari awal sampai akhir, terlepas dari baris mana yang di-drop nanti
+        sample_idx_list = list(df.index[: min(PIPELINE_SAMPLE_SIZE, total_rows)])
+        pipeline_records: dict = {
+            idx: {"Ulasan Asli": _format_sample_value(df.at[idx, "ulasan"])}
+            for idx in sample_idx_list
+        }
+        pipeline_columns = ["Ulasan Asli"] + [
+            lbl for lbl, _, _ in PREPROCESSING_STEPS_META
+        ]
 
-            for step_idx, (label, input_col, output_col) in enumerate(
-                PREPROCESSING_STEPS_META
-            ):
-                func = func_map[label]
+        def _build_pipeline_sample() -> list[dict]:
+            rows = []
+            for idx in sample_idx_list:
+                record = pipeline_records.get(idx, {})
+                rows.append({col: record.get(col, "—") for col in pipeline_columns})
+            return rows
 
-                if output_col not in df.columns:
-                    df[output_col] = pd.Series(dtype="object")
+        background_manager.set_progress(
+            self._session_id,
+            status="running",
+            current_step=PREPROCESSING_STEPS_META[0][0],
+            step_index=1,
+            total_steps=total_steps,
+            row_index=0,
+            total_rows=total_rows,
+            percent=0.0,
+            pipeline_sample=_build_pipeline_sample(),
+            sample_rows=[],
+        )
 
-                weight_before_step = sum(
-                    STEP_WEIGHTS[PREPROCESSING_STEPS_META[j][0]]
-                    for j in range(step_idx)
+        for step_i, (label, input_col, output_col) in enumerate(
+            PREPROCESSING_STEPS_META, start=1
+        ):
+            func = func_map[label]
+            if output_col not in df.columns:
+                df[output_col] = pd.Series(dtype="object")
+
+            step_weight = STEP_WEIGHTS[label]
+            live_buffer: deque = deque(maxlen=LIVE_SAMPLE_SIZE)
+
+            for row_i, idx in enumerate(df.index, start=1):
+                if stop_event.is_set():
+                    background_manager.set_progress(self._session_id, status="stopped")
+                    return
+
+                before_val = df.at[idx, input_col]
+                after_val = func(before_val)
+                df.at[idx, output_col] = after_val
+
+                live_buffer.append(
+                    {
+                        "before": _format_sample_value(before_val),
+                        "after": _format_sample_value(after_val),
+                    }
                 )
 
-                for i, idx in enumerate(df.index, start=1):
-                    if stop_event.is_set():
-                        _progress_set(
-                            progress_key,
-                            {
-                                "step_idx": step_idx,
-                                "row": i,
-                                "total_rows": total_rows,
-                                "pct": (
-                                    weight_before_step
-                                    + STEP_WEIGHTS[label] * (i / total_rows)
-                                )
-                                / total_weight,
-                                "finished": False,
-                                "stopped": True,
-                                "error": None,
-                                "df": df.iloc[:i].reset_index(drop=True),
-                                "preview_input_col": input_col,
-                                "preview_output_col": output_col,
-                                "preview_rows": df.iloc[max(0, i - preview_size) : i][
-                                    [input_col, output_col]
-                                ].reset_index(drop=True),
-                            },
-                        )
-                        return
+                if row_i % update_every == 0 or row_i == total_rows:
+                    step_progress = row_i / max(total_rows, 1)
+                    overall = (
+                        (completed_weight + step_weight * step_progress)
+                        / total_weight
+                        * 100
+                    )
+                    background_manager.set_progress(
+                        self._session_id,
+                        status="running",
+                        current_step=label,
+                        step_index=step_i,
+                        total_steps=total_steps,
+                        row_index=row_i,
+                        total_rows=total_rows,
+                        percent=round(min(overall, 99.9), 1),
+                        sample_rows=list(live_buffer),
+                    )
 
-                    df.at[idx, output_col] = func(df.at[idx, input_col])
+            completed_weight += step_weight * total_rows
 
-                    if i % update_every == 0 or i == total_rows:
-                        pct = (
-                            weight_before_step + STEP_WEIGHTS[label] * (i / total_rows)
-                        ) / total_weight
-                        _progress_set(
-                            progress_key,
-                            {
-                                "step_idx": step_idx,
-                                "row": i,
-                                "total_rows": total_rows,
-                                "pct": pct,
-                                "finished": False,
-                                "stopped": False,
-                                "error": None,
-                                "df": None,
-                                "preview_input_col": input_col,
-                                "preview_output_col": output_col,
-                                "preview_rows": df.iloc[max(0, i - preview_size) : i][
-                                    [input_col, output_col]
-                                ].reset_index(drop=True),
-                            },
-                        )
+            if label == "Stemming":
+                df.dropna(subset=[output_col], inplace=True)
+                df = df[df[output_col].astype(str).str.strip() != ""].copy()
+                # baris contoh yang ikut terbuang saat Stemming dihapus dari pelacakan
+                sample_idx_list = [idx for idx in sample_idx_list if idx in df.index]
 
-                if label == "Stemming":
-                    # Filter out empty rows after stemming
-                    df.dropna(subset=[output_col], inplace=True)
-                    df = df[df[output_col].astype(str).str.strip() != ""].copy()
-                    total_rows = len(df)
+            # perbarui tabel pipeline lengkap dengan hasil langkah yang baru selesai
+            for idx in sample_idx_list:
+                pipeline_records[idx][label] = _format_sample_value(
+                    df.at[idx, output_col]
+                )
 
-            # PENTING: blok ini di LUAR kedua loop (for step_idx & for i, idx),
-            # supaya "finished": True hanya ditulis SEKALI, setelah SEMUA step
-            # dan SEMUA baris selesai diproses -- bukan setiap iterasi baris.
-            _progress_set(
-                progress_key,
-                {
-                    "step_idx": total_steps,
-                    "row": total_rows,
-                    "total_rows": total_rows,
-                    "pct": 1.0,
-                    "finished": True,
-                    "stopped": False,
-                    "error": None,
-                    "df": df.reset_index(drop=True),
-                    "preview_input_col": None,
-                    "preview_output_col": None,
-                    "preview_rows": None,
-                },
+            background_manager.set_progress(
+                self._session_id,
+                pipeline_sample=_build_pipeline_sample(),
             )
-        except Exception as e:
-            _progress_set(
-                progress_key,
-                {
-                    "step_idx": 0,
-                    "row": 0,
-                    "total_rows": total_rows,
-                    "pct": 0.0,
-                    "finished": False,
-                    "stopped": False,
-                    "error": str(e),
-                    "df": None,
-                    "preview_input_col": None,
-                    "preview_output_col": None,
-                    "preview_rows": None,
-                },
-            )
+
+        CSV_DIR.mkdir(parents=True, exist_ok=True)
+        df.to_csv(PREPROCESSED_CSV_PATH, index=False)
+
+        background_manager.set_progress(
+            self._session_id,
+            status="done",
+            current_step="Selesai",
+            step_index=total_steps,
+            total_steps=total_steps,
+            row_index=total_rows,
+            total_rows=total_rows,
+            percent=100.0,
+        )
 
     def _case_folding(self, text) -> str:
         if pd.isna(text):
@@ -668,108 +845,6 @@ class AppPage(BasePage):
 
     @lru_cache(maxsize=1)
     def _load_slang_dictionary(self) -> dict[str, str]:
-        slang_dict = {
-            "gak": "tidak",
-            "ga": "tidak",
-            "gk": "tidak",
-            "tdk": "tidak",
-            "nggak": "tidak",
-            "ngga": "tidak",
-            "kagak": "tidak",
-            "gabisa": "tidak bisa",
-            "gaada": "tidak ada",
-            "gajelas": "tidak jelas",
-            "gamau": "tidak mau",
-            "ckp": "cukup",
-            "bgt": "banget",
-            "yg": "yang",
-            "utk": "untuk",
-            "tlg": "tolong",
-            "dr": "dari",
-            "jd": "jadi",
-            "jgn": "jangan",
-            "udh": "sudah",
-            "udah": "sudah",
-            "blm": "belum",
-            "sm": "sama",
-            "sy": "saya",
-            "aja": "saja",
-            "dgn": "dengan",
-            "tp": "tapi",
-            "gmn": "bagaimana",
-            "gimana": "bagaimana",
-            "pgn": "pengen",
-            "pengen": "ingin",
-            "mksd": "maksud",
-            "mksdnya": "maksudnya",
-            "jg": "juga",
-            "krn": "karena",
-            "knp": "kenapa",
-            "klo": "kalau",
-            "kalo": "kalau",
-            "gtu": "begitu",
-            "gitu": "begitu",
-            "skrg": "sekarang",
-            "skrng": "sekarang",
-            "trs": "terus",
-            "dpt": "dapat",
-            "liat": "lihat",
-            "pake": "pakai",
-            "bikin": "membuat",
-            "nih": "ini",
-            "bnyk": "banyak",
-            "org": "orang",
-            "bs": "bisa",
-            "bsk": "besok",
-            "emg": "memang",
-            "emang": "memang",
-            "pny": "punya",
-            "gpp": "tidak apa-apa",
-            "gapapa": "tidak apa-apa",
-            "bgs": "bagus",
-            "mantul": "mantap betul",
-            "parah": "sangat",
-            "ribet": "rumit",
-            "gw": "saya",
-            "gue": "saya",
-            "lu": "kamu",
-            "lo": "kamu",
-            "sbnrnya": "sebenarnya",
-            "sbnernya": "sebenarnya",
-            "bbrp": "beberapa",
-            "stlh": "setelah",
-            "sblm": "sebelum",
-            "msh": "masih",
-            "trnyt": "ternyata",
-            "wkt": "waktu",
-            "ngelag": "lag",
-            "lagging": "lag",
-            "ngebug": "bug",
-            "ngehang": "macet",
-            "fc": "force close",
-            "maintenance": "pemeliharaan",
-            "dc": "disconnect",
-            "connect": "tersambung",
-            "lemot": "lambat",
-            "berat": "lambat",
-            "crash": "berhenti mendadak",
-            "restart": "mulai ulang",
-            "gacha": "gacha",
-            "p2w": "pay to win",
-            "f2p": "free to play",
-            "op": "overpowered",
-            "nerf": "pelemahan",
-            "buff": "penguatan",
-            "event": "acara",
-            "update": "pembaruan",
-            "maintenence": "pemeliharaan",
-            "sultan": "pemain berdompet tebal",
-            "noob": "pemain baru",
-            "cheat": "kecurangan",
-            "glitch": "bug",
-            "respawn": "muncul ulang",
-        }
-
         try:
             df = pd.read_csv(SLANG_CSV_PATH)
             df.columns = df.columns.str.strip().str.lower()

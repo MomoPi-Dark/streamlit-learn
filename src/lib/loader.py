@@ -7,14 +7,15 @@ class PageLoader:
     def __init__(self, pages_dir: str = "src/app_pages"):
         self.pages_dir = pages_dir
 
-    def load_pages(self) -> list[BasePage]:
-        instances: list[BasePage] = []
+    def load_page_classes(self) -> list[type[BasePage]]:
+        page_classes: list[type[BasePage]] = []
 
         if not os.path.exists(self.pages_dir):
             os.makedirs(self.pages_dir)
-            return instances
+            return page_classes
 
         page_files: list[str] = []
+
         for root, _, files in os.walk(self.pages_dir):
             for file_name in files:
                 if file_name.endswith(".py"):
@@ -38,10 +39,19 @@ class PageLoader:
                     inspect.isclass(obj)
                     and issubclass(obj, BasePage)
                     and obj is not BasePage
+                    and hasattr(obj, "__page_meta__")
                 ):
-                    if hasattr(obj, "__page_meta__"):
-                        instance = obj()
-                        instance.__page_file__ = os.path.abspath(file_path)
-                        instances.append(instance)
+                    obj.__page_file__ = os.path.abspath(file_path)
+                    page_classes.append(obj)
 
-        return instances
+        return page_classes
+
+    def load_pages(self) -> list[BasePage]:
+        pages: list[BasePage] = []
+
+        for cls in self.load_page_classes():
+            page = cls()
+            page.__page_file__ = cls.__page_file__
+            pages.append(page)
+
+        return pages

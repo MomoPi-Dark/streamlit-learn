@@ -49,8 +49,7 @@ class AppPage(BasePage):
             "dilihat oleh model selama training."
         )
 
-        st.info(
-            """
+        st.info("""
             **Tahap 8 - Evaluasi Model**
 
             - **Accuracy**: Persentase prediksi yang benar secara keseluruhan.
@@ -58,8 +57,7 @@ class AppPage(BasePage):
             - **Recall**: Kemampuan mendeteksi sampel aktual per kelas.
             - **F1-Score**: Rata-rata harmonik Precision dan Recall.
             - **Confusion Matrix**: Visualisasi tabel prediksi vs aktual.
-            """
-        )
+            """)
 
         if warning:
             st.warning(
@@ -70,9 +68,11 @@ class AppPage(BasePage):
         st.markdown("---")
 
         if self._validate_requirements():
-            st.error("🚫 Data belum siap. Selesaikan persyaratan di atas terlebih dahulu sebelum melanjutkan ke Evaluation.")
+            st.error(
+                "🚫 Data belum siap. Selesaikan persyaratan di atas terlebih dahulu sebelum melanjutkan ke Evaluation."
+            )
             st.stop()
-            
+
         if METRICS_PATH.exists():
             self._render_existing_evaluation()
         else:
@@ -109,7 +109,9 @@ class AppPage(BasePage):
     def _render_evaluation(self) -> None:
         if X_TEST_PATH.exists():
             X_test = sparse.load_npz(X_TEST_PATH)
-            st.info(f"Data uji siap dievaluasi ({X_test.shape[0]:,} data, {X_test.shape[1]:,} fitur).")
+            st.info(
+                f"Data uji siap dievaluasi ({X_test.shape[0]:,} data, {X_test.shape[1]:,} fitur)."
+            )
 
         st.markdown("---")
 
@@ -219,11 +221,15 @@ class AppPage(BasePage):
 
         metrics = {
             "accuracy": accuracy_score(y_test, y_pred),
-            "precision": precision_score(y_test, y_pred, average="weighted", zero_division=0),
+            "precision": precision_score(
+                y_test, y_pred, average="weighted", zero_division=0
+            ),
             "recall": recall_score(y_test, y_pred, average="weighted", zero_division=0),
             "f1_score": f1_score(y_test, y_pred, average="weighted", zero_division=0),
             "labels": labels,
-            "confusion_matrix": confusion_matrix(y_test, y_pred, labels=labels).tolist(),
+            "confusion_matrix": confusion_matrix(
+                y_test, y_pred, labels=labels
+            ).tolist(),
             "classification_report": classification_report(
                 y_test, y_pred, labels=labels, output_dict=True, zero_division=0
             ),
@@ -239,10 +245,7 @@ class AppPage(BasePage):
     def _validate_requirements(self) -> list[str] | None:
         warnings: list[str] = []
 
-        if not MODEL_PATH.exists():
-            warnings.append("🤖 Model belum dilatih.")
-
-        if not get_session_state(StageKey.STAGE_7):
+        if not MODEL_PATH.exists() or not get_session_state(StageKey.STAGE_7):
             warnings.append("🤖 Tahap Training Model belum selesai.")
 
         if not X_TEST_PATH.exists() or not Y_TEST_PATH.exists():
