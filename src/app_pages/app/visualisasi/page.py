@@ -35,7 +35,6 @@ COLORMAP_DICT = {
     category="training",
 )
 class AppPage(BasePage):
-
     def on_start(self) -> None:
         # STAGE_9 = True hanya jika seluruh visualisasi sudah dibuat dan
         # tersimpan di disk — bukan sekadar prasyarat terpenuhi.
@@ -256,7 +255,7 @@ class AppPage(BasePage):
             ).generate(text)
 
             fig = plt.figure(figsize=(16, 8), dpi=300)
-            plt.imshow(wordcloud, interpolation="bilinear")
+            plt.imshow(wordcloud.to_array(), interpolation="bilinear")
             plt.axis("off")
             plt.title(
                 f"Top Kata Sentimen {label.upper()}",

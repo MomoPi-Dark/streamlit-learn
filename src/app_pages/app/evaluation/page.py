@@ -34,11 +34,10 @@ from lib.paths import (
     category="training",
 )
 class AppPage(BasePage):
-
     def on_start(self) -> None:
-        # STAGE_8 = True hanya jika hasil evaluasi benar-benar sudah
-        # dihitung dan tersimpan di disk — bukan sekadar prasyarat terpenuhi.
-        set_session_state(StageKey.STAGE_8, METRICS_PATH.exists())
+        set_session_state(
+            StageKey.STAGE_8, METRICS_PATH.exists() or self._validate_requirements()
+        )
 
     def run(self) -> None:
         warning = self._validate_requirements()

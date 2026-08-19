@@ -44,7 +44,6 @@ def _load_train_data():
     category="modeling",
 )
 class AppPage(BasePage):
-
     def on_start(self) -> None:
         is_ready = MODEL_PATH.exists()
 
@@ -232,7 +231,7 @@ Akurasi Train  : {train_accuracy * 100:.2f}%
         status.info("Mempersiapkan model...")
         progress.progress(0.3)
 
-        model = MultinomialNB(alpha=alpha)
+        model = MultinomialNB()
 
         status.info("Melatih model Naive Bayes...")
         progress.progress(0.6)
@@ -243,6 +242,7 @@ Akurasi Train  : {train_accuracy * 100:.2f}%
         progress.progress(0.9)
 
         train_accuracy = accuracy_score(y_train, model.predict(X_train))
+        progress.progress(1.0)
 
         return model, train_accuracy
 

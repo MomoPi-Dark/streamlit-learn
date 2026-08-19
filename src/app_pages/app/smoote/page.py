@@ -24,7 +24,6 @@ from lib.paths import (
     category="modeling",
 )
 class AppPage(BasePage):
-
     def on_start(self) -> None:
         # STAGE_6 = True hanya jika hasil resampling benar-benar sudah
         # tersimpan di disk — bukan sekadar prasyarat terpenuhi.

@@ -62,3 +62,8 @@ def get_session_state(key: str | Enum) -> Any:
 def set_session_state(key: str | Enum, value: Any) -> None:
     session_key = key.value if isinstance(key, Enum) else key
     st.session_state[session_key] = value
+
+
+def del_session_state(key: str | Enum) -> None:
+    session_key = key.value if isinstance(key, Enum) else key
+    del st.session_state[session_key]

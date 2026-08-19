@@ -16,10 +16,7 @@ from lib.paths import (
     PREPROCESSED_CSV_PATH,
 )
 from lib.enum import (
-    StateKey,
-    StageCollect,
     StageKey,
-    get_session_state,
     set_session_state,
 )
 from structures.base import BasePage, Options
@@ -36,21 +33,21 @@ from lib.running_badge import render_status_badges
 RE_URL = re.compile(r"http\S+|www\S+")
 RE_MENTION_HASHTAG = re.compile(r"@\w+|#\w+")
 RE_EMOJI = re.compile(
-    r"[\U0001F600-\U0001F64F"
-    r"\U0001F300-\U0001F5FF"
-    r"\U0001F680-\U0001F6FF"
-    r"\U0001F1E0-\U0001F1FF"
-    r"\U00002700-\U000027BF"
-    r"\U0001F900-\U0001F9FF"
-    r"\U00002600-\U000026FF"
-    r"\U0001FA70-\U0001FAFF"
-    r"\U00002500-\U00002BEF"
+    r"[\U0001F600-\U0001F64F"  # emoticon
+    r"\U0001F300-\U0001F5FF"  # simbol & piktograf
+    r"\U0001F680-\U0001F6FF"  # transportasi & simbol map
+    r"\U0001F1E0-\U0001F1FF"  # bendera
+    r"\U00002700-\U000027BF"  # dingbats
+    r"\U0001F900-\U0001F9FF"  # supplemental symbols & pictographs
+    r"\U00002600-\U000026FF"  # misc symbols
+    r"\U0001FA70-\U0001FAFF"  # symbols & pictographs extended-A
+    r"\U00002500-\U00002BEF"  # various symbols
     r"]+"
 )
 RE_NON_WORD = re.compile(r"[^\w\s]")
 RE_MULTISPACE = re.compile(r"\s+")
 RE_DIGIT = re.compile(r"\d+")
-RE_REPEAT_CHAR = re.compile(r"(.)\1{2,}")
+RE_REPEAT_CHAR = re.compile(r"(.)\1{2,}")  # 3+ huruf sama berturut-turut
 
 REQUIRED_COLUMNS = [
     "username",
@@ -66,21 +63,23 @@ _stopword_factory = StopWordRemoverFactory()
 _stopwords = sorted(
     set(_stopword_factory.get_stop_words())
     # | set(index.load_stopwords())
-    | set({"nya", "di", "bugil"})
+    # | set({"nya", "di", "bugil"})
 )
 _dictionary = ArrayDictionary(_stopwords)
 _stopword_remover = StopWordRemover(_dictionary)
 _stemmer = StemmerFactory().create_stemmer()
 
 
-@lru_cache(maxsize=200_000)
+@lru_cache(maxsize=50_000)
 def _stem_word_cached(word: str) -> str:
     return _stemmer.stem(word)
 
 
 slang_dict = {
-    "indo": "indonesia",
-    "cn": "china",
+    # # Negara
+    # "indo": "indonesia",
+    # "cn": "china",
+    # Negasi
     "gak": "tidak",
     "ga": "tidak",
     "gk": "tidak",
@@ -92,6 +91,7 @@ slang_dict = {
     "gaada": "tidak ada",
     "gajelas": "tidak jelas",
     "gamau": "tidak mau",
+    # Partikel & kata sambung umum
     "ckp": "cukup",
     "bgt": "banget",
     "yg": "yang",
@@ -154,6 +154,7 @@ slang_dict = {
     "msh": "masih",
     "trnyt": "ternyata",
     "wkt": "waktu",
+    # Slang khas review game (relevan buat NTE)
     "ngelag": "lag",
     "lagging": "lag",
     "ngebug": "bug",
@@ -183,7 +184,6 @@ slang_dict = {
 }
 
 
-# ===== Bobot relatif tiap step (estimasi beban komputasi) =====
 STEP_WEIGHTS = {
     "Case Folding": 1,
     "Cleaning": 1,
@@ -239,127 +239,6 @@ def _format_sample_value(value) -> str:
 def _esc(value) -> str:
     """Escape teks sebelum disisipkan ke HTML supaya aman & tidak merusak layout."""
     return html.escape(str(value), quote=True)
-
-
-# ===== CSS kustom (di-inject sekali per full page render) =====
-_CUSTOM_CSS = """
-<style>
-.pp-card {
-    background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01));
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 16px;
-    padding: 20px 24px;
-    margin-bottom: 16px;
-}
-.pp-banner {
-    display: flex; align-items: center; gap: 10px;
-    border-radius: 12px; border: 1px solid transparent;
-    padding: 12px 16px; font-weight: 600; font-size: 0.95em;
-    margin-bottom: 18px;
-}
-.pp-banner.info {
-    background: linear-gradient(90deg, rgba(99,102,241,0.16), rgba(56,189,248,0.08));
-    border-color: rgba(99,102,241,0.35); color: #c7d2fe;
-}
-.pp-banner.success {
-    background: linear-gradient(90deg, rgba(74,222,128,0.18), rgba(34,197,94,0.08));
-    border-color: rgba(74,222,128,0.4); color: #bbf7d0;
-}
-.pp-banner.warning {
-    background: linear-gradient(90deg, rgba(251,191,36,0.18), rgba(245,158,11,0.08));
-    border-color: rgba(251,191,36,0.4); color: #fde68a;
-}
-.pp-banner-icon { font-size: 1.15em; line-height: 1; }
-.pp-banner-icon.spin { display: inline-block; animation: pp-spin 1.6s linear infinite; }
-
-@keyframes pp-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-
-.pp-stepper {
-    display: flex; align-items: flex-start; justify-content: space-between;
-    margin: 4px 0 22px 0; position: relative;
-}
-.pp-step {
-    flex: 1; display: flex; flex-direction: column; align-items: center;
-    position: relative; z-index: 1; padding: 0 4px;
-}
-.pp-step:not(:first-child)::before {
-    content: ""; position: absolute; top: 23px; left: -50%; width: 100%; height: 3px;
-    background: rgba(255,255,255,0.08); z-index: -1; border-radius: 2px;
-}
-.pp-step.done:not(:first-child)::before {
-    background: linear-gradient(90deg, #22c55e, #38bdf8);
-}
-.pp-step-badge {
-    width: 46px; height: 46px; border-radius: 50%; position: relative;
-    display: flex; align-items: center; justify-content: center; font-size: 20px;
-    background: rgba(255,255,255,0.06); border: 2px solid rgba(255,255,255,0.14);
-    transition: all .35s ease;
-}
-.pp-step.done .pp-step-badge {
-    background: rgba(74,222,128,0.16); border-color: #22c55e;
-}
-.pp-step.active .pp-step-badge {
-    background: rgba(56,189,248,0.2); border-color: #38bdf8;
-    animation: pp-pulse 1.5s ease-in-out infinite;
-}
-@keyframes pp-pulse {
-    0%, 100% { box-shadow: 0 0 0 4px rgba(56,189,248,0.10); }
-    50% { box-shadow: 0 0 0 11px rgba(56,189,248,0.16); }
-}
-.pp-step.pending .pp-step-badge { opacity: 0.4; }
-.pp-step-check {
-    position: absolute; top: -3px; right: -3px; width: 17px; height: 17px;
-    background: #22c55e; color: #0e1117; border-radius: 50%; font-size: 10px;
-    font-weight: 900; display: flex; align-items: center; justify-content: center;
-}
-.pp-step-label { margin-top: 8px; font-size: 0.76em; text-align: center; color: #cbd5e1; }
-.pp-step.active .pp-step-label { color: #38bdf8; font-weight: 700; }
-.pp-step.done .pp-step-label { color: #4ade80; }
-.pp-step.pending .pp-step-label { opacity: 0.45; }
-
-.pp-progress-outer {
-    background: rgba(255,255,255,0.08); border-radius: 999px; height: 14px;
-    overflow: hidden; position: relative;
-}
-.pp-progress-inner {
-    height: 100%; border-radius: 999px;
-    background: linear-gradient(90deg, #6366f1, #38bdf8, #6366f1);
-    background-size: 200% 100%;
-    animation: pp-shimmer 2.2s linear infinite;
-    transition: width .4s ease;
-}
-@keyframes pp-shimmer { 0% { background-position: 0 0; } 100% { background-position: 200% 0; } }
-.pp-progress-label {
-    display: flex; justify-content: space-between; font-size: 0.8em;
-    color: #94a3b8; margin-top: 6px;
-}
-
-.pp-section-title {
-    font-size: 0.95em; font-weight: 700; color: #e2e8f0;
-    display: flex; align-items: center; gap: 6px; margin-bottom: 2px;
-}
-.pp-section-caption { font-size: 0.78em; color: #94a3b8; margin-bottom: 12px; }
-
-.pp-table { width: 100%; border-collapse: collapse; font-size: 0.83em; }
-.pp-table th {
-    text-align: left; padding: 8px 10px; background: rgba(255,255,255,0.045);
-    color: #94a3b8; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.08);
-}
-.pp-table td {
-    padding: 9px 10px; border-bottom: 1px solid rgba(255,255,255,0.05);
-    color: #e2e8f0; vertical-align: top;
-}
-.pp-table tr:last-child td { border-bottom: none; }
-.pp-table tr:hover td { background: rgba(255,255,255,0.03); }
-.pp-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.94em; }
-.pp-arrow-cell { text-align: center; color: #38bdf8; width: 28px; }
-.pp-pending-cell { color: #475569; font-style: italic; }
-</style>
-"""
-
-
-def _inject_custom_css() -> None:
-    st.markdown(_CUSTOM_CSS, unsafe_allow_html=True)
 
 
 def _banner_html(icon: str, text: str, kind: str = "info", spin: bool = False) -> str:
@@ -462,7 +341,6 @@ class AppPage(BasePage):
 
     def run(self) -> None:
         render_status_badges()
-        _inject_custom_css()
 
         warning = self._validate_requirements()
 
@@ -555,8 +433,6 @@ class AppPage(BasePage):
         session_uid = self._session_id
         running = background_manager.is_running(session_uid)
 
-        # Kalau proses lagi berjalan, langsung tampilkan animasi progress
-        # -> tidak perlu baca ulang CSV sumber setiap 0.5 detik
         if running:
             self._render_progress_animation()
             return
@@ -605,7 +481,6 @@ class AppPage(BasePage):
         progress = background_manager.get_progress(session_uid)
         status = progress.get("status")
 
-        # Proses sudah tidak jalan lagi -> tentukan hasil akhirnya
         if not running:
             if status == "done":
                 st.markdown(
@@ -714,13 +589,8 @@ class AppPage(BasePage):
         ) * max(total_rows, 1)
         completed_weight = 0
 
-        # update progress setiap ~1% data supaya animasi mulus tanpa
-        # membebani lock dengan update di setiap baris
         update_every = max(1, total_rows // 100)
 
-        # ===== Baris contoh untuk tabel "pipeline lengkap" =====
-        # dipilih sekali di awal (posisi pertama) supaya konsisten dilacak
-        # dari awal sampai akhir, terlepas dari baris mana yang di-drop nanti
         sample_idx_list = list(df.index[: min(PIPELINE_SAMPLE_SIZE, total_rows)])
         pipeline_records: dict = {
             idx: {"Ulasan Asli": _format_sample_value(df.at[idx, "ulasan"])}
@@ -760,7 +630,7 @@ class AppPage(BasePage):
             step_weight = STEP_WEIGHTS[label]
             live_buffer: deque = deque(maxlen=LIVE_SAMPLE_SIZE)
 
-            for row_i, idx in enumerate(df.index, start=1):
+            for row_i, idx in enumerate(df.index):
                 if stop_event.is_set():
                     background_manager.set_progress(self._session_id, status="stopped")
                     return
@@ -797,13 +667,12 @@ class AppPage(BasePage):
 
             completed_weight += step_weight * total_rows
 
-            if label == "Stemming":
-                df.dropna(subset=[output_col], inplace=True)
-                df = df[df[output_col].astype(str).str.strip() != ""].copy()
-                # baris contoh yang ikut terbuang saat Stemming dihapus dari pelacakan
-                sample_idx_list = [idx for idx in sample_idx_list if idx in df.index]
+            # if label == "Stemming":
+            #     df.dropna(subset=[output_col], inplace=True)
+            #     df = df[df[output_col].astype(str).str.strip() != ""].copy()
+            #     # baris contoh yang ikut terbuang saat Stemming dihapus dari pelacakan
+            #     sample_idx_list = [idx for idx in sample_idx_list if idx in df.index]
 
-            # perbarui tabel pipeline lengkap dengan hasil langkah yang baru selesai
             for idx in sample_idx_list:
                 pipeline_records[idx][label] = _format_sample_value(
                     df.at[idx, output_col]
@@ -829,17 +698,22 @@ class AppPage(BasePage):
         )
 
     def _case_folding(self, text) -> str:
+        """Mengubah teks menjadi huruf kecil."""
         if pd.isna(text):
             return ""
         return str(text).lower()
 
     def _cleaning(self, text: str) -> str:
+        """Menghapus URL, mention/hashtag, emoji, angka, tanda baca,
+        dan huruf berulang berlebihan (misal 'gilaaaa' -> 'gila')."""
         text = RE_URL.sub("", text)
         text = RE_MENTION_HASHTAG.sub("", text)
         text = RE_EMOJI.sub("", text)
         text = RE_DIGIT.sub("", text)
         text = RE_NON_WORD.sub("", text)
-        text = RE_REPEAT_CHAR.sub(r"\1", text)
+        text = RE_REPEAT_CHAR.sub(
+            r"\1", text
+        )  # <-- tambahan: aaaa -> a, bagusss -> bagus
         text = RE_MULTISPACE.sub(" ", text).strip()
         return text
 

@@ -31,8 +31,9 @@ class AppPage(BasePage):
             return
 
         with open(ULASAN_RAW_CSV_PATH, encoding="utf-8") as f:
-            set_session_state(StageCollect.DATASET_COUNT, sum(1 for _ in f) - 1)
+            dataset_count = sum(1 for _ in f) - 1
 
+        set_session_state(StageCollect.DATASET_COUNT, dataset_count)
         set_session_state(StageKey.STAGE_1_DATASET, True)
 
         if get_session_state(StageKey.STAGE_1_SLANG):

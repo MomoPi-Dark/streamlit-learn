@@ -1,0 +1,336 @@
+.pp-card {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.035),
+    rgba(255, 255, 255, 0.01)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 20px 24px;
+  margin-bottom: 16px;
+}
+
+.spinner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1ch;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.05em;
+  line-height: 1;
+  color: #38bdf8;
+}
+
+.spinner::before {
+  content: "⠋";
+  animation: spinner-frames 1s steps(1) infinite;
+}
+
+@keyframes spinner-frames {
+  0% {
+    content: "⠋";
+  }
+  10% {
+    content: "⠙";
+  }
+  20% {
+    content: "⠹";
+  }
+  30% {
+    content: "⠸";
+  }
+  40% {
+    content: "⠼";
+  }
+  50% {
+    content: "⠴";
+  }
+  60% {
+    content: "⠦";
+  }
+  70% {
+    content: "⠧";
+  }
+  80% {
+    content: "⠇";
+  }
+  90% {
+    content: "⠏";
+  }
+  100% {
+    content: "⠋";
+  }
+}
+
+.pp-banner {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.035),
+    rgba(255, 255, 255, 0.01)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 20px 24px;
+  margin-bottom: 16px;
+}
+.pp-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 0.95em;
+  margin-bottom: 18px;
+}
+.pp-banner.info {
+  background: linear-gradient(
+    90deg,
+    rgba(99, 102, 241, 0.16),
+    rgba(56, 189, 248, 0.08)
+  );
+  border-color: rgba(99, 102, 241, 0.35);
+  color: #c7d2fe;
+}
+.pp-banner.success {
+  background: linear-gradient(
+    90deg,
+    rgba(74, 222, 128, 0.18),
+    rgba(34, 197, 94, 0.08)
+  );
+  border-color: rgba(74, 222, 128, 0.4);
+  color: #bbf7d0;
+}
+.pp-banner.warning {
+  background: linear-gradient(
+    90deg,
+    rgba(251, 191, 36, 0.18),
+    rgba(245, 158, 11, 0.08)
+  );
+  border-color: rgba(251, 191, 36, 0.4);
+  color: #fde68a;
+}
+.pp-banner-icon {
+  font-size: 1.15em;
+  line-height: 1;
+}
+.pp-banner-icon.spin {
+  display: inline-block;
+  animation: pp-spin 1.6s linear infinite;
+}
+
+@keyframes pp-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pp-stepper {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin: 4px 0 22px 0;
+  position: relative;
+}
+.pp-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+  padding: 0 4px;
+}
+
+/* Connector line: pakai ::after (menjorok MAJU ke step berikutnya),
+   bukan ::before (menjorok mundur). Ini penting supaya garis jadi
+   bagian dari stacking context step yang lebih AWAL di DOM, sehingga
+   selalu ter-paint DI BAWAH badge step sesudahnya — bukan nembus
+   nutupinnya. Kalau pakai ::before, garis "milik" step belakangan yang
+   di-paint terakhir jadi nutupin badge step sebelumnya walau z-index
+   lokalnya -1, karena z-index itu cuma berlaku di dalam stacking
+   context step itu sendiri, bukan lintas-sibling. */
+.pp-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 23px;
+  left: 50%;
+  width: 100%;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  z-index: -1;
+  border-radius: 2px;
+}
+.pp-step.done:not(:last-child)::after {
+  background: linear-gradient(90deg, #22c55e, #38bdf8);
+}
+
+.pp-step-badge {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  /* backdrop solid dulu (opaque), baru tint warna ditumpuk di atasnya
+     lewat background-image, biar badge beneran nutupin garis di
+     belakangnya dan nggak "tembus" transparan */
+  background-color: #0e1117;
+  background-image: linear-gradient(
+    rgba(255, 255, 255, 0.06),
+    rgba(255, 255, 255, 0.06)
+  );
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  transition: all 0.35s ease;
+}
+.pp-step.done .pp-step-badge {
+  background-color: #0e1117;
+  background-image: linear-gradient(
+    rgba(74, 222, 128, 0.16),
+    rgba(74, 222, 128, 0.16)
+  );
+  border-color: #22c55e;
+}
+.pp-step.active .pp-step-badge {
+  background-color: #0e1117;
+  background-image: linear-gradient(
+    rgba(56, 189, 248, 0.2),
+    rgba(56, 189, 248, 0.2)
+  );
+  border-color: #38bdf8;
+  animation: pp-pulse 1.5s ease-in-out infinite;
+}
+@keyframes pp-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 0 11px rgba(56, 189, 248, 0.16);
+  }
+}
+.pp-step.pending .pp-step-badge {
+  opacity: 0.4;
+}
+.pp-step-check {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 17px;
+  height: 17px;
+  background: #22c55e;
+  color: #0e1117;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pp-step-label {
+  margin-top: 8px;
+  font-size: 0.76em;
+  text-align: center;
+  color: #cbd5e1;
+}
+.pp-step.active .pp-step-label {
+  color: #38bdf8;
+  font-weight: 700;
+}
+.pp-step.done .pp-step-label {
+  color: #4ade80;
+}
+.pp-step.pending .pp-step-label {
+  opacity: 0.45;
+}
+
+.pp-progress-outer {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  height: 14px;
+  overflow: hidden;
+  position: relative;
+}
+.pp-progress-inner {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #6366f1, #38bdf8, #6366f1);
+  background-size: 200% 100%;
+  animation: pp-shimmer 2.2s linear infinite;
+  transition: width 0.4s ease;
+}
+@keyframes pp-shimmer {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+.pp-progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8em;
+  color: #94a3b8;
+  margin-top: 6px;
+}
+
+.pp-section-title {
+  font-size: 0.95em;
+  font-weight: 700;
+  color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+.pp-section-caption {
+  font-size: 0.78em;
+  color: #94a3b8;
+  margin-bottom: 12px;
+}
+
+.pp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.83em;
+}
+.pp-table th {
+  text-align: left;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.045);
+  color: #94a3b8;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.pp-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: #e2e8f0;
+  vertical-align: top;
+}
+.pp-table tr:last-child td {
+  border-bottom: none;
+}
+.pp-table tr:hover td {
+  background: rgba(255, 255, 255, 0.03);
+}
+.pp-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.94em;
+}
+.pp-arrow-cell {
+  text-align: center;
+  color: #38bdf8;
+  width: 28px;
+}
+.pp-pending-cell {
+  color: #475569;
+  font-style: italic;
+}

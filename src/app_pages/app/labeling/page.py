@@ -1,3 +1,4 @@
+import time
 import streamlit as st
 import pandas as pd
 
@@ -153,42 +154,53 @@ class AppPage(BasePage):
             st.rerun()
 
     def _label_dataset(self, df_raw: pd.DataFrame) -> pd.DataFrame:
-        progress = st.progress(0)
-        status = st.empty()
-        preview = st.empty()
-
         df = df_raw.copy()
-
-        # Hapus rating netral
         df = df[df["score"] != 3].copy()
-        df.reset_index(drop=True, inplace=True)
 
-        labels = []
-        total = len(df)
+        progress_bar = st.progress(0)
+        status_text = st.empty()
 
-        for i, (_, row) in enumerate(df.iterrows(), start=1):
-            if row["score"] >= 4:
-                labels.append("Positif")
-            else:
-                labels.append("Negatif")
+        steps = [
+            ("Memulai pelabelan...", 0.2),
+            ("Mengklasifikasi sentimen...", 0.5),
+            ("Memvalidasi hasil...", 0.8),
+            ("Menyusun ringkasan...", 1.0),
+        ]
 
-            progress.progress(i / total)
-            status.info(f"Melabeli data {i:,}/{total:,}")
+        for msg, pct in steps:
+            status_text.info(msg)
+            progress_bar.progress(pct)
+            time.sleep(0.3)
 
-            # Update preview setiap 100 data
-            if i % 100 == 0 or i == total:
-                temp = df.iloc[:i].copy()
-                temp["sentimen_label"] = labels
+        def tentukan_sentimen(nilai_bintang):
+            if nilai_bintang >= 4:
+                return "Positif"
+            elif nilai_bintang <= 2:
+                return "Negatif"
 
-                preview.dataframe(
-                    temp[REQUIRED_COLUMNS].tail(10),
-                    width="stretch",
-                )
+        df["sentimen_label"] = df["score"].apply(tentukan_sentimen)
 
-        df["sentimen_label"] = labels
+        status_text.success("Pelabelan selesai!")
+        time.sleep(0.5)
+        status_text.empty()
+        progress_bar.empty()
 
-        progress.progress(1.0)
-        status.success("✅ Pelabelan selesai")
+        st.write("### Hasil Pelabelan Otomatis:")
+        st.write(df["sentimen_label"].value_counts())
+        st.write(f"\nTotal data sekarang (setelah rating 3 dihapus): {len(df)} data")
+
+        sample_pos = df[df["sentimen_label"] == "Positif"].sample(
+            n=min(5, (df["sentimen_label"] == "Positif").sum()), random_state=42
+        )
+
+        sample_neg = df[df["sentimen_label"] == "Negatif"].sample(
+            n=min(5, (df["sentimen_label"] == "Negatif").sum()), random_state=42
+        )
+
+        sample_gabungan = pd.concat([sample_pos, sample_neg])[REQUIRED_COLUMNS]
+
+        st.write("Contoh 5 Komentar Positif dan 5 Komentar Negatif:\n")
+        st.dataframe(sample_gabungan, width="stretch")
 
         return df
 

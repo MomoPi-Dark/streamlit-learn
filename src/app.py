@@ -6,6 +6,7 @@ import joblib
 import os
 import importlib.util
 from pathlib import Path
+from functools import lru_cache
 from typing import Any, Optional, cast
 from lib.enum import StateKey, StageKey, get_session_state
 from lib.loader import PageLoader
@@ -14,6 +15,9 @@ from lib.category_config import CategoryConfig, CATEGORY_CONFIG
 from streamlit.navigation.page import StreamlitPage
 from lib.enum import load_session_state
 from lib.running_badge import mark_pages_reloaded
+import sys
+
+LOADER_DIR = "./src/app_pages"
 
 load_session_state()
 
@@ -83,19 +87,53 @@ st.markdown(
         font-size: 20px !important;
         padding-bottom: 4px;
     }
+
+    .sb-progress-label {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.74em;
+        color: #94a3b8;
+        margin-bottom: 6px;
+    }
+    .sb-progress-outer {
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+        height: 8px;
+        overflow: hidden;
+        margin-bottom: 14px;
+    }
+    .sb-progress-inner {
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #22c55e, #38bdf8);
+        transition: width 0.4s ease;
+    }
+    .sb-step-fallback {
+        font-size: 0.9em;
+        color: #94a3b8;
+        padding: 6px 4px;
+    }
 </style>
 """,
     unsafe_allow_html=True,
 )
 
 
-def get_page_category(page: BasePage) -> Optional[str]:
-    """Return category for grouping: from metadata if set, else infer from folder name."""
-    meta = page.__page_meta__
+@lru_cache(maxsize=None)
+def get_page_category(page_cls: type) -> Optional[str]:
+    """Return category for grouping: from metadata if set, else infer from folder name.
+
+    Di-cache per class (lru_cache) karena hasilnya statis — path file dan metadata
+    kategori sebuah halaman tidak pernah berubah antar-rerun. Tanpa cache ini,
+    Path.resolve()/relative_to() dipanggil ulang berkali-kali tiap interaksi
+    (klik tombol, dsb), padahal hasilnya selalu sama. Di-key pakai class (bukan
+    instance) karena instance halaman dibuat ulang tiap rerun lewat
+    create_page_instances(), sedangkan class-nya tetap sama.
+    """
+    meta = page_cls.__page_meta__
     if meta.category:
         return meta.category
-    # infer from path: first folder under src/app_pages
-    file_path = getattr(page, "__page_file__", None)
+    file_path = getattr(page_cls, "__page_file__", None)
     if file_path is None:
         return None
     base_dir = Path("src/app_pages").resolve()
@@ -106,10 +144,32 @@ def get_page_category(page: BasePage) -> Optional[str]:
         return None
     parts = list(relative.parts)
     if len(parts) >= 2 and parts[-1].lower().endswith(".py"):
-        # file like Category/something.py or Category/page.py
         return parts[0]
-    # If file is directly under app_pages (e.g., page.py) => no category
     return None
+
+
+@st.cache_data
+def get_css_content(css_path: str, mtime: float) -> str:
+    return Path(css_path).read_text(encoding="utf-8")
+
+
+def _load_page_css(page: BasePage) -> None:
+    """Load sibling style.css for given page if exists and inject into Streamlit."""
+    file_path = getattr(page, "__style_file__", None)
+
+    if not file_path:
+        return
+
+    css_path = Path(file_path)
+    if not css_path.is_file():
+        return
+
+    try:
+        mtime = css_path.stat().st_mtime
+        css = get_css_content(str(css_path), mtime)
+        st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+    except OSError:
+        return
 
 
 def find_page_by_url(
@@ -125,7 +185,7 @@ def find_page_by_url(
 
 
 def is_page_visible(page: BasePage) -> bool:
-    category = get_page_category(page)
+    category = get_page_category(type(page))
     if not category:
         return page.__page_meta__.enabled
 
@@ -140,50 +200,23 @@ def is_page_visible(page: BasePage) -> bool:
     )
 
 
-def slugify(text: str) -> str:
-    text = text.strip().lower()
-    text = re.sub(r"[^a-z0-9]+", "-", text)
-    return text.strip("-")
-
-
-def build_url_path(page: BasePage) -> str:
-    """
-    URL path dari struktur folder:
-      app_pages/page.py              -> ""
-      app_pages/{slug}/page.py       -> "{slug}"
-      app_pages/{slug}/{name}.py     -> "{slug}-{name}"
-    """
-    file_path = getattr(page, "__page_file__", None)
-    if file_path is None:
-        return slugify(page.__page_meta__.menu_name)
-
-    base_dir = Path("src/app_pages").resolve()
-    file_path = Path(file_path).resolve()
-    relative_path = file_path.relative_to(base_dir)
-    parts = list(relative_path.parts)
-
-    parts[-1] = Path(parts[-1]).stem
-
-    # Halaman root
-    if parts == ["page"]:
-        return "/"
-
-    # dataset/page.py -> dataset
-    if parts[-1] == "page":
-        parts.pop()
-
-    return "-".join(part.lower().replace("_", "-") for part in parts)
-
-
 def make_page_runner(page: BasePage):
     def _runner():
+        _load_page_css(page)
         page()
 
     return _runner
 
 
 def get_pages_version() -> str:
-    pages_dir = Path("src/app_pages")
+    # Skip filesystem walk kalau bukan mode dev — hemat I/O tiap rerun.
+    # Set environment variable APP_DEV=1 saat development biar hot-reload
+    # tetap jalan; kosongkan/hapus saat demo/sidang supaya app.py tidak
+    # perlu rglob() + stat() semua file tiap kali ada interaksi.
+    if not os.environ.get("APP_DEV"):
+        return "static"
+
+    pages_dir = Path(LOADER_DIR)
 
     if not pages_dir.exists():
         return ""
@@ -197,56 +230,59 @@ def get_pages_version() -> str:
 
 
 @st.cache_resource
-def get_page_classes(version: str):
-    loader = PageLoader("src/app_pages")
+def get_page_classes(dir: str, version: str):
+    loader = PageLoader(dir)
     classes = loader.load_page_classes()
     mark_pages_reloaded()
     return classes
 
 
-def create_page_instances() -> list[BasePage]:
+def create_page_instances(dir: str) -> list[BasePage]:
     version = get_pages_version()
-    page_classes = get_page_classes(version)
+    page_classes = get_page_classes(dir, version)
 
     return [cls() for cls in page_classes]
 
 
 def main():
     page_instances: list[BasePage] = [
-        page for page in create_page_instances() if is_page_visible(page)
+        page for page in create_page_instances(LOADER_DIR) if is_page_visible(page)
     ]
 
     if not page_instances:
         st.error(
-            "Folder `app_pages/` belum memiliki file `.py` yang menggunakan `@Options`."
+            f"Folder `{LOADER_DIR}` belum memiliki file `.py` yang menggunakan `@Options`."
         )
         return
 
-    # # Urutan kategori sesuai CATEGORY_CONFIG
     category_order = {category: index for index, category in enumerate(CATEGORY_CONFIG)}
 
     page_instances.sort(
         key=lambda page: (
-            0 if get_page_category(page) is None else 1,
+            0 if get_page_category(type(page)) is None else 1,
             category_order.get(
-                get_page_category(page) or "/",
+                get_page_category(type(page)) or "/",
                 len(category_order),
             ),
             page.__page_meta__.page_name.lower(),
         )
     )
 
-    # Build Streamlit pages
-    # Build Streamlit pages and lookup dictionary
     st_pages: list[StreamlitPage] = []
     page_lookup: dict[int, StreamlitPage] = {}
 
     for index, page in enumerate(page_instances):
         meta = page.__page_meta__
 
+        # CSS halaman TIDAK di-load di sini lagi — cukup di dalam
+        # make_page_runner() untuk halaman yang benar-benar sedang aktif.
+        # Sebelumnya _load_page_css(page) dipanggil di loop ini untuk
+        # SEMUA halaman setiap rerun, padahal cuma 1 halaman yang tampil,
+        # jadi CSS 9+ halaman ke-inject ulang ke DOM tiap interaksi.
         page.on_start()
 
-        url_path = build_url_path(page)
+        url_path = PageLoader.build_url_path(page)
+
         st_page = st.Page(
             make_page_runner(page),
             title=meta.menu_name,
@@ -260,7 +296,6 @@ def main():
     pg = st.navigation(st_pages, position="hidden")
 
     # ===== Sidebar =====
-
     st.sidebar.title("🎮 Navigasi Menu")
     st.sidebar.markdown(
         '<div style="padding-bottom: 4px;"></div>',
@@ -269,31 +304,59 @@ def main():
 
     with st.sidebar.expander("📊 Pipeline Status", expanded=True):
         pipeline_steps = [
-            ("1. Pengumpulan Data", StageKey.STAGE_1, "/app-dataset"),
-            ("2. Pelabelan Data", StageKey.STAGE_2, "/app-labeling"),
-            ("3. Preprocessing", StageKey.STAGE_3, "/app-preprocessing"),
-            ("4. Pembobotan TF-IDF", StageKey.STAGE_4, "/app-tfidf"),
-            ("5. Train-Test Split", StageKey.STAGE_5, "/app-splitdata"),
-            ("6. Penyeimbangan Kelas (SMOTE)", StageKey.STAGE_6, "/app-smoote"),
-            ("7. Training Model", StageKey.STAGE_7, "/app-naifbayes"),
-            ("8. Evaluasi Model", StageKey.STAGE_8, "/app-evaluation"),
-            ("9. Visualisasi", StageKey.STAGE_9, "/app-visualisasi"),
+            ("Pengumpulan Data", StageKey.STAGE_1, "/app-dataset"),
+            ("Pelabelan Data", StageKey.STAGE_2, "/app-labeling"),
+            ("Preprocessing", StageKey.STAGE_3, "/app-preprocessing"),
+            ("Pembobotan TF-IDF", StageKey.STAGE_4, "/app-tfidf"),
+            ("Train-Test Split", StageKey.STAGE_5, "/app-splitdata"),
+            ("Penyeimbangan Kelas (SMOTE)", StageKey.STAGE_6, "/app-smoote"),
+            ("Training Model", StageKey.STAGE_7, "/app-naifbayes"),
+            ("Evaluasi Model", StageKey.STAGE_8, "/app-evaluation"),
+            ("Visualisasi", StageKey.STAGE_9, "/app-visualisasi"),
         ]
 
-        for label, key, link in pipeline_steps:
+        done_flags = [bool(get_session_state(key)) for _, key, _ in pipeline_steps]
+        done_count = sum(done_flags)
+        total_count = len(pipeline_steps)
+        pct = (done_count / total_count * 100) if total_count else 0
+
+        # ===== Ringkasan progres di atas daftar =====
+        st.markdown(
+            f"<div class='sb-progress-label'>"
+            f"<span>{done_count}/{total_count} tahap selesai</span>"
+            f"<span>{pct:.0f}%</span></div>"
+            f"<div class='sb-progress-outer'>"
+            f"<div class='sb-progress-inner' style='width:{pct:.1f}%;'></div></div>",
+            unsafe_allow_html=True,
+        )
+
+        found_active = False
+        for i, (label, key, link) in enumerate(pipeline_steps, start=1):
             done = bool(get_session_state(key))
 
+            if done:
+                icon = "✅"
+            elif not found_active:
+                icon = "🔵"
+                found_active = True
+            else:
+                icon = "⚪"
+
             target_page = find_page_by_url(st_pages, link)
-            icon = "✅" if done else "⬜"
+            step_label = f"{i}. {label}"
 
             if target_page:
                 st.page_link(
                     target_page,
-                    label=f"{icon} {label}",
+                    label=step_label,
+                    icon=icon,
                     width="stretch",
                 )
             else:
-                st.markdown(f"&nbsp;&nbsp;{icon} {label}", unsafe_allow_html=True)
+                st.markdown(
+                    f"<div class='sb-step-fallback'>{icon}&nbsp;&nbsp;{step_label}</div>",
+                    unsafe_allow_html=True,
+                )
 
     st.sidebar.markdown(
         '<div class="sidebar-divider"></div>',
@@ -303,7 +366,7 @@ def main():
     current_category = None
 
     for index, page in enumerate(page_instances):
-        category = get_page_category(page)
+        category = get_page_category(type(page))
         meta = page.__page_meta__
 
         if category is not None and category != current_category:
@@ -335,6 +398,7 @@ def main():
         unsafe_allow_html=True,
     )
     st.sidebar.caption("🎮 NTE Sentiment Analysis Framework")
+    # ==== END SIDEBAR ====
 
     pg.run()
 

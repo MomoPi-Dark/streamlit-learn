@@ -1,0 +1,258 @@
+/* =========================================================
+   OVERVIEW PAGE — token warna & style disamakan dengan
+   pp-* (preprocessing) supaya seluruh app terasa satu sistem,
+   bukan tema baru yang bentrok.
+   ========================================================= */
+
+.ov-hero {
+  padding: 8px 0 20px 0;
+}
+.ov-hero-eyebrow {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72em;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #7c9eff;
+  margin-bottom: 10px;
+}
+.ov-hero h1 {
+  font-size: 2em;
+  font-weight: 800;
+  margin: 0 0 8px 0;
+  color: #f1f5f9;
+  letter-spacing: -0.01em;
+}
+.ov-hero p {
+  font-size: 0.95em;
+  line-height: 1.6;
+  color: #94a3b8;
+  max-width: 640px;
+  margin: 0;
+}
+.ov-hero-rule {
+  margin-top: 18px;
+  height: 2px;
+  width: 64px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #6366f1, #38bdf8);
+}
+
+/* ===== Stat cards ===== */
+.ov-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 22px 0 30px 0;
+}
+.ov-stat-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.035),
+    rgba(255, 255, 255, 0.01)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  padding: 16px 18px;
+  transition:
+    border-color 0.25s ease,
+    transform 0.25s ease;
+}
+.ov-stat-card:hover {
+  transform: translateY(-1px);
+}
+.ov-stat-card.positive {
+  border-left-color: #22c55e;
+}
+.ov-stat-card.attention {
+  border-left-color: #fbbf24;
+}
+.ov-stat-icon {
+  font-size: 1.3em;
+  line-height: 1;
+  margin-top: 2px;
+}
+.ov-stat-label {
+  font-size: 0.78em;
+  color: #94a3b8;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.ov-stat-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.25em;
+  font-weight: 700;
+  color: #e2e8f0;
+  letter-spacing: -0.01em;
+}
+.ov-stat-badge {
+  font-size: 0.74em;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+/* ===== Section titles ===== */
+.ov-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.02em;
+  font-weight: 700;
+  color: #e2e8f0;
+  margin: 6px 0 14px 0;
+}
+.ov-section-eyebrow {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.68em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #64748b;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 3px 10px;
+  order: 2;
+}
+.ov-subsection-title {
+  font-size: 0.88em;
+  font-weight: 700;
+  color: #cbd5e1;
+  margin: 4px 0 10px 0;
+}
+
+/* ===== Flow / tahapan (grid 9 tahap) ===== */
+.ov-flow-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 16px;
+  margin-bottom: 22px;
+}
+.ov-flow-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.035),
+    rgba(255, 255, 255, 0.01)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  padding: 18px 20px 16px 20px;
+  min-height: 132px;
+  transition:
+    border-color 0.25s ease,
+    transform 0.2s ease;
+}
+.ov-flow-step:hover {
+  transform: translateY(-1px);
+}
+.ov-flow-step.done {
+  border-left-color: #22c55e;
+}
+.ov-flow-step.active {
+  border-left-color: #38bdf8;
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.15);
+}
+.ov-flow-step.pending {
+  opacity: 0.5;
+}
+.ov-flow-number {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72em;
+  color: #475569;
+  letter-spacing: 0.06em;
+  margin-bottom: 10px;
+}
+.ov-flow-icon {
+  font-size: 1.4em;
+  margin-bottom: 10px;
+}
+.ov-flow-title {
+  font-size: 0.92em;
+  font-weight: 700;
+  color: #e2e8f0;
+  line-height: 1.35;
+  flex-grow: 1;
+}
+.ov-flow-badge {
+  font-size: 0.76em;
+  font-weight: 600;
+  color: #cbd5e1;
+  margin-top: 14px;
+}
+
+/* ===== Result grid (ringkasan evaluasi) ===== */
+.ov-result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.ov-metric-card {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.035),
+    rgba(255, 255, 255, 0.01)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid #38bdf8;
+  border-radius: 14px;
+  padding: 16px 18px;
+  transition: transform 0.25s ease;
+}
+.ov-metric-card:hover {
+  transform: translateY(-1px);
+}
+.ov-metric-label {
+  font-size: 0.78em;
+  color: #94a3b8;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.ov-metric-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.4em;
+  font-weight: 800;
+  color: #f1f5f9;
+  letter-spacing: -0.01em;
+}
+
+/* ===== Caption ===== */
+.ov-caption {
+  font-size: 0.8em;
+  color: #64748b;
+  line-height: 1.5;
+  margin: 0 0 22px 0;
+}
+.ov-caption b {
+  color: #94a3b8;
+}
+
+/* ===== Banner (locked / empty state) ===== */
+.ov-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(251, 191, 36, 0.06);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 0.88em;
+  color: #cbd5e1;
+  margin: 8px 0 20px 0;
+}
+.ov-banner span:first-child {
+  font-size: 1.1em;
+  line-height: 1;
+}
+
+/* ===== Divider ===== */
+.ov-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 26px 0;
+}

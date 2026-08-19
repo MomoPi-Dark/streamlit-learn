@@ -8,107 +8,23 @@ from lib.paths import METRICS_PATH, WORD_FREQ_IMAGE_PATH, WORDCLOUD_IMAGE_PATH_T
 from structures.base import BasePage, Options
 from lib.enum import StageKey, get_session_state, set_session_state
 
-# ===== CSS kustom (senada dengan halaman Preprocessing) =====
-_OVERVIEW_CSS = """
-<style>
-.ov-hero {
-    background: linear-gradient(135deg, rgba(99,102,241,0.18), rgba(56,189,248,0.08));
-    border: 1px solid rgba(99,102,241,0.35);
-    border-radius: 18px;
-    padding: 26px 28px;
-    margin-bottom: 20px;
-}
-.ov-hero h1 { margin: 0 0 6px 0; font-size: 1.6em; color: #f1f5f9; }
-.ov-hero p { margin: 0; color: #cbd5e1; font-size: 0.95em; line-height: 1.55; max-width: 640px; }
 
-.ov-stats { display: flex; gap: 16px; margin-bottom: 22px; }
-.ov-stat-card {
-    flex: 1; display: flex; align-items: center; gap: 14px;
-    background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01));
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 16px; padding: 18px 20px;
-}
-.ov-stat-icon {
-    width: 48px; height: 48px; border-radius: 14px; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center; font-size: 22px;
-}
-.ov-stat-card.positive .ov-stat-icon { background: rgba(74,222,128,0.16); }
-.ov-stat-card.attention .ov-stat-icon { background: rgba(251,191,36,0.16); }
-.ov-stat-label { font-size: 0.8em; color: #94a3b8; margin-bottom: 2px; }
-.ov-stat-value { font-size: 1.35em; font-weight: 800; color: #e2e8f0; line-height: 1.2; }
-.ov-stat-badge {
-    display: inline-block; margin-top: 5px; padding: 2px 10px; border-radius: 999px;
-    font-size: 0.72em; font-weight: 700;
-}
-.ov-stat-card.positive .ov-stat-badge { background: rgba(74,222,128,0.18); color: #4ade80; }
-.ov-stat-card.attention .ov-stat-badge { background: rgba(251,191,36,0.18); color: #fbbf24; }
-
-.ov-section-title {
-    font-size: 1.02em; font-weight: 700; color: #e2e8f0;
-    display: flex; align-items: center; gap: 8px; margin: 4px 0 14px 0;
-}
-
-.ov-flow { display: flex; align-items: stretch; gap: 4px; margin-bottom: 18px; }
-.ov-flow-step {
-    flex: 1; border-radius: 16px; padding: 18px 16px;
-    border: 1px solid rgba(255,255,255,0.08);
-    background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.004));
-    transition: all .3s ease;
-}
-.ov-flow-step.done { border-color: rgba(74,222,128,0.4); }
-.ov-flow-step.active {
-    border-color: rgba(56,189,248,0.55);
-    box-shadow: 0 0 0 3px rgba(56,189,248,0.12);
-}
-.ov-flow-step.pending { opacity: 0.55; }
-.ov-flow-icon { font-size: 24px; margin-bottom: 8px; }
-.ov-flow-title { font-weight: 700; font-size: 0.95em; color: #e2e8f0; margin-bottom: 4px; }
-.ov-flow-desc { font-size: 0.8em; color: #94a3b8; line-height: 1.45; margin-bottom: 12px; min-height: 34px; }
-.ov-flow-badge {
-    font-size: 0.7em; font-weight: 700; padding: 2px 9px; border-radius: 999px; display: inline-block;
-}
-.ov-flow-step.done .ov-flow-badge { background: rgba(74,222,128,0.18); color: #4ade80; }
-.ov-flow-step.active .ov-flow-badge { background: rgba(56,189,248,0.2); color: #38bdf8; }
-.ov-flow-step.pending .ov-flow-badge { background: rgba(255,255,255,0.08); color: #94a3b8; }
-.ov-flow-arrow {
-    display: flex; align-items: center; justify-content: center;
-    color: #475569; font-size: 18px; padding: 0 2px; flex-shrink: 0;
-}
-
-.ov-banner {
-    display: flex; align-items: center; gap: 10px;
-    border-radius: 12px; border: 1px solid rgba(251,191,36,0.4);
-    background: linear-gradient(90deg, rgba(251,191,36,0.16), rgba(245,158,11,0.07));
-    color: #fde68a; padding: 12px 16px; font-weight: 600; font-size: 0.9em;
-    margin-top: 4px;
-}
-
-.ov-result-grid { display: flex; gap: 16px; margin-bottom: 18px; }
-.ov-metric-card {
-    flex: 1; text-align: center;
-    background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01));
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 16px; padding: 16px 12px;
-}
-.ov-metric-label { font-size: 0.78em; color: #94a3b8; margin-bottom: 4px; }
-.ov-metric-value { font-size: 1.5em; font-weight: 800; color: #4ade80; }
-</style>
-"""
-
-
-def _inject_overview_css() -> None:
-    st.markdown(_OVERVIEW_CSS, unsafe_allow_html=True)
-
-
-def _hero_html(title: str, subtitle: str) -> str:
-    return f"<div class='ov-hero'><h1>{title}</h1><p>{subtitle}</p></div>"
+def _hero_html(eyebrow: str, title: str, subtitle: str) -> str:
+    return (
+        "<div class='ov-hero'>"
+        f"<div class='ov-hero-eyebrow'>{eyebrow}</div>"
+        f"<h1>{title}</h1>"
+        f"<p>{subtitle}</p>"
+        "<div class='ov-hero-rule'></div>"
+        "</div>"
+    )
 
 
 def _stat_card_html(icon: str, label: str, value: str, badge: str, tone: str) -> str:
     return (
         f"<div class='ov-stat-card {tone}'>"
         f"<div class='ov-stat-icon'>{icon}</div>"
-        "<div>"
+        "<div class='ov-stat-body'>"
         f"<div class='ov-stat-label'>{label}</div>"
         f"<div class='ov-stat-value'>{value}</div>"
         f"<div class='ov-stat-badge'>{badge}</div>"
@@ -125,22 +41,23 @@ def _metric_card_html(label: str, value: str) -> str:
     )
 
 
+def _flow_badge(state: str) -> str:
+    return {
+        "done": "✅ Selesai",
+        "active": "🔵 Sedang berjalan",
+        "pending": "⚪ Menunggu",
+    }[state]
+
+
 def _flow_html(steps: list[dict]) -> str:
-    parts = ["<div class='ov-flow'>"]
+    parts = ["<div class='ov-flow-grid'>"]
     for i, step in enumerate(steps):
-        if i > 0:
-            parts.append("<div class='ov-flow-arrow'>›</div>")
-        badge_map = {
-            "done": "✅ Selesai",
-            "active": "🔵 Sedang berjalan",
-            "pending": "⚪ Menunggu",
-        }
         parts.append(
             f"<div class='ov-flow-step {step['state']}'>"
+            f"<div class='ov-flow-number'>{i + 1:02d}</div>"
             f"<div class='ov-flow-icon'>{step['icon']}</div>"
             f"<div class='ov-flow-title'>{step['title']}</div>"
-            f"<div class='ov-flow-desc'>{step['desc']}</div>"
-            f"<div class='ov-flow-badge'>{badge_map[step['state']]}</div>"
+            f"<div class='ov-flow-badge'>{_flow_badge(step['state'])}</div>"
             "</div>"
         )
     parts.append("</div>")
@@ -149,7 +66,8 @@ def _flow_html(steps: list[dict]) -> str:
 
 def _render_results_summary() -> None:
     st.markdown(
-        "<div class='ov-section-title'>📊 Ringkasan Hasil</div>",
+        "<div class='ov-section-title'><span class='ov-section-eyebrow'>Hasil</span>"
+        "📊 Ringkasan Evaluasi Model</div>",
         unsafe_allow_html=True,
     )
 
@@ -172,11 +90,16 @@ def _render_results_summary() -> None:
         ("Recall", "recall"),
         ("F1-Score", "f1_score"),
     ]:
-        grid_html += _metric_card_html(label, f"{metrics[key] * 100:.1f}%")
+        grid_html += _metric_card_html(label, f"{metrics[key] * 100:.2f}%")
     grid_html += "</div>"
     st.markdown(grid_html, unsafe_allow_html=True)
 
-    st.caption(f"Terakhir dievaluasi: {metrics['evaluated_at']}")
+    st.markdown(
+        f"<div class='ov-caption'>Precision, Recall, dan F1-Score dihitung dengan "
+        f"rata-rata <b>weighted</b> (mempertimbangkan proporsi tiap kelas) · "
+        f"Terakhir dievaluasi: {metrics['evaluated_at']}</div>",
+        unsafe_allow_html=True,
+    )
 
     wordcloud_labels = ["Positif", "Negatif"]
     candidates = [(WORD_FREQ_IMAGE_PATH, "Top 20 Kata")] + [
@@ -186,7 +109,10 @@ def _render_results_summary() -> None:
     thumbs = [(path, caption) for path, caption in candidates if path.exists()]
 
     if thumbs:
-        st.write("**🖼️ Visualisasi Tersedia**")
+        st.markdown(
+            "<div class='ov-subsection-title'>🖼️ Visualisasi Tersedia</div>",
+            unsafe_allow_html=True,
+        )
         cols = st.columns(len(thumbs))
         for col, (path, caption) in zip(cols, thumbs):
             with col:
@@ -200,13 +126,8 @@ def _render_results_summary() -> None:
         )
 
 
-@Options(
-    page_name="overview", menu_name="Overview", menu_icon="🏠", requires_model=False
-)
+@Options(page_name="overview", menu_name="Overview", menu_icon="🏠")
 class AppPage(BasePage):
-    def on_start(self) -> None:
-        _inject_overview_css()
-
     def run(self) -> None:
         render_status_badges()
 
@@ -216,10 +137,13 @@ class AppPage(BasePage):
         # ===== Hero =====
         st.markdown(
             _hero_html(
+                "Penelitian Skripsi · Analisis Sentimen Ulasan Game",
                 "🎮 NTE Sentiment Analyzer",
-                "Selamat datang di framework analisis sentimen ulasan game. "
-                "Gunakan menu di sidebar untuk navigasi antar tahap: mulai dari "
-                "persiapan dataset, pelatihan model, sampai testing klasifikasi real-time.",
+                "Framework analisis sentimen ulasan pengguna game berbasis "
+                "<b>TF-IDF</b> dan <b>Multinomial Naive Bayes</b>. Gunakan menu "
+                "di sidebar untuk menelusuri tiap tahap penelitian — mulai dari "
+                "persiapan dataset, pelatihan model, hingga pengujian klasifikasi "
+                "secara langsung.",
             ),
             unsafe_allow_html=True,
         )
@@ -228,11 +152,15 @@ class AppPage(BasePage):
         stats_html = "<div class='ov-stats'>"
         if dataset_count:
             stats_html += _stat_card_html(
-                "📊", "Dataset", f"{dataset_count:,} baris", "Tersedia", "positive"
+                "📊",
+                "Dataset",
+                f"N = {dataset_count:,}",
+                "Tersedia",
+                "positive",
             )
         else:
             stats_html += _stat_card_html(
-                "📊", "Dataset", "Belum ada", "Kosong", "attention"
+                "📊", "Dataset", "N = —", "Belum dimuat", "attention"
             )
 
         if is_ready:
@@ -246,47 +174,50 @@ class AppPage(BasePage):
         stats_html += "</div>"
         st.markdown(stats_html, unsafe_allow_html=True)
 
-        # # ===== Alur Penggunaan =====
-        # st.markdown(
-        #     "<div class='ov-section-title'>📋 Alur Penggunaan</div>",
-        #     unsafe_allow_html=True,
-        # )
+        # ===== Alur Penelitian =====
+        st.markdown(
+            "<div class='ov-section-title'><span class='ov-section-eyebrow'>Alur</span>"
+            "📋 Tahapan Penelitian</div>",
+            unsafe_allow_html=True,
+        )
 
-        if is_ready:
-            dataset_state, modeling_state = "done", "done"
-        elif dataset_count:
-            dataset_state, modeling_state = "done", "active"
-        else:
-            dataset_state, modeling_state = (
-                "active",
-                "pending",
-            )
-
-        steps = [
-            {
-                "icon": "📊",
-                "title": "1. Dataset",
-                "desc": "Upload atau muat dataset ulasan game yang akan dianalisis.",
-                "state": dataset_state,
-            },
-            {
-                "icon": "🧠",
-                "title": "2. Modeling",
-                "desc": "Latih model TF-IDF + Multinomial Naive Bayes dari dataset.",
-                "state": modeling_state,
-            },
+        # Sesuaikan nama StageKey ini kalau berbeda dari enum kamu.
+        pipeline_stages = [
+            (StageKey.STAGE_1, "📥", "Pengumpulan Data"),
+            (StageKey.STAGE_2, "🏷️", "Pelabelan Data"),
+            (StageKey.STAGE_3, "🧹", "Preprocessing"),
+            (StageKey.STAGE_4, "🧮", "Pembobotan TF-IDF"),
+            (StageKey.STAGE_5, "✂️", "Train-Test Split"),
+            (StageKey.STAGE_6, "⚖️", "Penyeimbangan Kelas (SMOTE)"),
+            (StageKey.STAGE_7, "🧠", "Training Model"),
+            (StageKey.STAGE_8, "📈", "Evaluasi Model"),
+            (StageKey.STAGE_9, "🖼️", "Visualisasi"),
         ]
+
+        steps = []
+        found_active = False
+        for stage_key, icon, title in pipeline_stages:
+            done = bool(get_session_state(stage_key))
+            if done:
+                state = "done"
+            elif not found_active:
+                state = "active"
+                found_active = True
+            else:
+                state = "pending"
+            steps.append({"icon": icon, "title": title, "state": state})
+
         st.markdown(_flow_html(steps), unsafe_allow_html=True)
 
         if not is_ready:
             st.markdown(
                 "<div class='ov-banner'>"
                 "<span>🔒</span>"
-                "<span>Beberapa halaman terkunci sampai model berhasil dilatih atau "
-                "dimuat di menu <b>Modeling</b>.</span>"
+                "<span> Beberapa halaman terkunci sampai seluruh tahapan di atas "
+                "selesai dijalankan.</span>"
                 "</div>",
                 unsafe_allow_html=True,
             )
         else:
-            st.markdown("---")
+            st.markdown("<div class='ov-divider'></div>", unsafe_allow_html=True)
             _render_results_summary()

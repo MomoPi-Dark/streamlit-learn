@@ -9,19 +9,12 @@ from scipy import sparse
 from datetime import datetime
 from structures.base import BasePage, Options
 from lib.enum import (
-    StateKey,
-    StageCollect,
     StageKey,
     get_session_state,
     set_session_state,
 )
 from lib.paths import (
-    ULASAN_LABELED_CSV_PATH,
-    ULASAN_RAW_CSV_PATH,
-    SLANG_CSV_PATH,
-    CSV_DIR,
     PREPROCESSED_CSV_PATH,
-    TFIDF_FEATURE_NAMES_PATH,
     TFIDF_DIR,
     TFIDF_MATRIX_PATH,
     TFIDF_VECTORIZER_PATH,
@@ -37,6 +30,13 @@ required_columns = set(REQUIRED_COLUMNS)
 
 
 def identity_tokenizer(tokens: list[str]) -> list[str]:
+    """Analyzer identitas untuk TfidfVectorizer — tokens sudah siap pakai,
+    tidak perlu di-tokenize/lowercase ulang. Sengaja diletakkan di modul
+    terpisah (bukan di file halaman Streamlit) supaya joblib bisa
+    pickle/unpickle fungsi ini lewat path import yang stabil
+    (`lib.text_utils.identity_tokenizer`), karena file halaman di-load
+    Streamlit secara dinamis dan __module__-nya tidak reliable untuk pickling.
+    """
     return tokens
 
 
@@ -47,7 +47,6 @@ def identity_tokenizer(tokens: list[str]) -> list[str]:
     category="tf-idf",
 )
 class AppPage(BasePage):
-
     def on_start(self) -> None:
         set_session_state(StageKey.STAGE_4, False)
 
@@ -241,7 +240,8 @@ class AppPage(BasePage):
 
             st.rerun()
 
-    # ==========================================================
+        # ==========================================================
+
     # PROCESS
     # ==========================================================
 
@@ -254,16 +254,23 @@ class AppPage(BasePage):
         status.info("Mempersiapkan data...")
         progress.progress(0.2)
 
-        # Convert token lists back into whitespace-joined strings so we can
-        # use sklearn's default tokenizer (no custom function to pickle).
+        # Kolom "tokenizing" tersimpan sebagai string representasi list
+        # (mis. "['kata1', 'kata2']"), jadi di-eval balik jadi list[str],
+        # lalu digabung pakai spasi. Token hasil stemming/tokenizing
+        # dijamin tidak mengandung spasi di dalamnya, jadi join+split ini
+        # secara hasil SAMA PERSIS dengan analyzer=lambda x: x di notebook
+        # — tapi tanpa custom function, sehingga vectorizer aman di-pickle
+        # oleh joblib (custom function/lambda gagal di-pickle kalau
+        # __module__-nya tidak stabil, seperti pada file halaman Streamlit
+        # yang di-load secara dinamis).
         token = df["tokenizing"].apply(eval).apply(lambda t: " ".join(t))
 
         status.info("Membuat TF-IDF Vectorizer...")
         progress.progress(0.4)
 
         tfidf = TfidfVectorizer(
-            lowercase=False,  # your tokens are presumably already lowercased/cleaned
-            token_pattern=r"(?u)\S+",  # split on whitespace, keep tokens as-is
+            lowercase=False,  # token sudah diproses/lowercased sebelumnya
+            token_pattern=r"(?u)\S+",  # split per token berdasarkan spasi,
         )
 
         status.info("Menghitung bobot TF-IDF...")

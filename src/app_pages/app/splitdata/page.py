@@ -29,7 +29,6 @@ LABEL_COLUMN = "sentimen_label"  # sesuaikan jika nama kolom label di dataset be
     category="spliting",
 )
 class AppPage(BasePage):
-
     def on_start(self) -> None:
         # STAGE_5 = True hanya jika hasil split benar-benar sudah
         # diproses dan tersimpan di disk — bukan sekadar prasyarat terpenuhi.
@@ -68,12 +67,13 @@ class AppPage(BasePage):
             )
 
         st.markdown("---")
-        
-        
+
         if warning:
-            st.error("🚫 Data belum siap. Selesaikan persyaratan di atas terlebih dahulu sebelum melanjutkan ke Split Data.")
+            st.error(
+                "🚫 Data belum siap. Selesaikan persyaratan di atas terlebih dahulu sebelum melanjutkan ke Split Data."
+            )
             st.stop()
-        
+
         if X_TRAIN_PATH.exists() and X_TEST_PATH.exists():
             self._render_existing_split()
         else:
@@ -145,7 +145,9 @@ class AppPage(BasePage):
         matrix = sparse.load_npz(TFIDF_MATRIX_PATH)
         df = pd.read_csv(PREPROCESSED_CSV_PATH)
 
-        st.info(f"Dataset siap dibagi ({matrix.shape[0]:,} data, {matrix.shape[1]:,} fitur).")
+        st.info(
+            f"Dataset siap dibagi ({matrix.shape[0]:,} data, {matrix.shape[1]:,} fitur)."
+        )
 
         test_size = st.slider(
             "Ukuran Data Test (%)",
@@ -250,9 +252,12 @@ Jumlah Data Test  : {X_test.shape[0]:,}
     def _validate_requirements(self) -> list[str] | None:
         warnings: list[str] = []
 
-        if not TFIDF_MATRIX_PATH.exists() or not TFIDF_VECTORIZER_PATH.exists() or not get_session_state(StageKey.STAGE_4):
+        if (
+            not TFIDF_MATRIX_PATH.exists()
+            or not TFIDF_VECTORIZER_PATH.exists()
+            or not get_session_state(StageKey.STAGE_4)
+        ):
             warnings.append("📊 Hasil pembobotan TF-IDF belum tersedia.")
-
 
         if not PREPROCESSED_CSV_PATH.exists():
             warnings.append("🧹 Dataset hasil preprocessing belum tersedia.")

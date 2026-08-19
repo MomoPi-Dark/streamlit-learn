@@ -2,36 +2,37 @@ import shutil
 from pathlib import Path
 
 # File ini di-import normal (bukan exec), jadi __file__ aman dipakai di sini
-ROOT_DIR = Path(__file__).resolve().parents[2]
+ROOT_DIR = Path(__file__).resolve().parents[2] / "public"
 
-CSV_DIR = ROOT_DIR / "lib/csv"
+# Data folder yang sebenarnya berada di public/csv
+CSV_DIR = ROOT_DIR / "csv"
 ULASAN_RAW_CSV_PATH = CSV_DIR / "ulasan_raw_nte.csv"
 SLANG_CSV_PATH = CSV_DIR / "slang.csv"
 ULASAN_LABELED_CSV_PATH = CSV_DIR / "ulasan_berlabel_nte.csv"
 PREPROCESSED_CSV_PATH = CSV_DIR / "ulasan_preprocessed_nte.csv"
 
-TFIDF_DIR = ROOT_DIR / "lib/tfidf"
+TFIDF_DIR = ROOT_DIR / "tfidf"
 TFIDF_VECTORIZER_PATH = TFIDF_DIR / "tfidf_vectorizer.pkl"
 TFIDF_MATRIX_PATH = TFIDF_DIR / "tfidf_matrix.npz"
 TFIDF_FEATURE_NAMES_PATH = TFIDF_DIR / "tfidf_feature_names.pkl"
 
-SPLIT_DIR = ROOT_DIR / "lib/split"
+SPLIT_DIR = ROOT_DIR / "split"
 X_TRAIN_PATH = SPLIT_DIR / "X_train.npz"
 X_TEST_PATH = SPLIT_DIR / "X_test.npz"
 Y_TRAIN_PATH = SPLIT_DIR / "y_train.pkl"
 Y_TEST_PATH = SPLIT_DIR / "y_test.pkl"
 
-SMOTE_DIR = ROOT_DIR / "lib/smote"
+SMOTE_DIR = ROOT_DIR / "smote"
 X_TRAIN_RESAMPLED_PATH = SMOTE_DIR / "X_train_resampled.npz"
 Y_TRAIN_RESAMPLED_PATH = SMOTE_DIR / "y_train_resampled.pkl"
 
-MODEL_DIR = ROOT_DIR / "lib/model"
+MODEL_DIR = ROOT_DIR / "model"
 MODEL_PATH = MODEL_DIR / "naive_bayes_model.pkl"
 
-EVALUATION_DIR = ROOT_DIR / "lib/evaluation"
+EVALUATION_DIR = ROOT_DIR / "evaluation"
 METRICS_PATH = EVALUATION_DIR / "metrics.json"
 
-IMAGES_DIR = ROOT_DIR / "lib/images"
+IMAGES_DIR = ROOT_DIR / "images"
 WORD_FREQ_IMAGE_PATH = IMAGES_DIR / "diagram_batang_20_kata.png"
 
 

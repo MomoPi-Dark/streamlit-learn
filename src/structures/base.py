@@ -70,7 +70,9 @@ def Options(
 
 class BasePage(ABC):
     __page_meta__: ClassVar[PageMetadata]
+
     __page_file__: str
+    __style_file__: Optional[str] = None
 
     def on_start(self) -> None:
         """Ringan. Jalan untuk SEMUA page tiap rerun (dipanggil manual di loop main.py).
