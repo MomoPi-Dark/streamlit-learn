@@ -35,9 +35,7 @@ from lib.paths import (
 )
 class AppPage(BasePage):
     def on_start(self) -> None:
-        set_session_state(
-            StageKey.STAGE_8, METRICS_PATH.exists() or self._validate_requirements()
-        )
+        set_session_state(StageKey.STAGE_8, METRICS_PATH.exists())
 
     def run(self) -> None:
         warning = self._validate_requirements()
