@@ -29,7 +29,7 @@ required_columns = set(REQUIRED_COLUMNS)
 
 
 @Options(
-    page_name="slang",
+    page_id="slang",
     menu_name="Kamus Slang",
     menu_icon="📚",
     category="dataset",

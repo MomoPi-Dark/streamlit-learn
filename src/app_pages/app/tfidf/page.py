@@ -41,7 +41,7 @@ def identity_tokenizer(tokens: list[str]) -> list[str]:
 
 
 @Options(
-    page_name="tfidf",
+    page_id="tfidf",
     menu_name="TF-IDF",
     menu_icon="📊",
     category="tf-idf",

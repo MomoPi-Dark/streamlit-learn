@@ -28,7 +28,7 @@ from lib.paths import (
 
 
 @Options(
-    page_name="evaluation",
+    page_id="evaluation",
     menu_name="Evaluasi Model",
     menu_icon="📈",
     category="training",
@@ -89,19 +89,18 @@ class AppPage(BasePage):
 
         st.markdown("---")
 
-        with st.expander("🔄 Evaluasi Ulang"):
-            st.warning(
-                "Hasil evaluasi yang ada akan ditimpa apabila proses dijalankan kembali."
-            )
-            if st.button(
-                "🔄 Evaluasi Ulang Model",
-                type="primary",
-                width="stretch",
-                disabled=bool(self._validate_requirements()),
-                key="reeval_button",
-            ):
-                self._run_evaluation()
-                st.rerun()
+        st.warning(
+            "Hasil evaluasi yang ada akan ditimpa apabila proses dijalankan kembali."
+        )
+        if st.button(
+            "🔄 Evaluasi Ulang Model",
+            type="primary",
+            width="stretch",
+            disabled=bool(self._validate_requirements()),
+            key="reeval_button",
+        ):
+            self._run_evaluation()
+            st.rerun()
 
     def _render_evaluation(self) -> None:
         if X_TEST_PATH.exists():

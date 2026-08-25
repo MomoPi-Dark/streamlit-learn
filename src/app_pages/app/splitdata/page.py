@@ -23,15 +23,13 @@ LABEL_COLUMN = "sentimen_label"  # sesuaikan jika nama kolom label di dataset be
 
 
 @Options(
-    page_name="train_test_split",
+    page_id="splitdata",
     menu_name="Train-Test Split",
     menu_icon="🔀",
     category="spliting",
 )
 class AppPage(BasePage):
     def on_start(self) -> None:
-        # STAGE_5 = True hanya jika hasil split benar-benar sudah
-        # diproses dan tersimpan di disk — bukan sekadar prasyarat terpenuhi.
         is_completed = (
             X_TRAIN_PATH.exists()
             and X_TEST_PATH.exists()
@@ -50,15 +48,13 @@ class AppPage(BasePage):
             "dan data **uji (test)** untuk keperluan pelatihan dan evaluasi model."
         )
 
-        st.info(
-            """
+        st.info("""
             **Tahap 5 - Train-Test Split**
 
             Tahap ini membagi matriks TF-IDF dan label menjadi dua bagian:
             data latih untuk melatih model, dan data uji untuk mengevaluasi
             performa model secara objektif pada data yang belum pernah dilihat.
-            """
-        )
+            """)
 
         if warning:
             st.warning(
@@ -200,13 +196,10 @@ class AppPage(BasePage):
             progress.progress(1.0)
             status.success("✅ Train-Test Split selesai.")
 
-            st.success(
-                f"""
-Jumlah Data Train : {X_train.shape[0]:,}
-
-Jumlah Data Test  : {X_test.shape[0]:,}
-"""
-            )
+            st.success(f"""
+                Jumlah Data Train : {X_train.shape[0]:,}
+                Jumlah Data Test  : {X_test.shape[0]:,}
+            """)
 
             st.rerun()
 

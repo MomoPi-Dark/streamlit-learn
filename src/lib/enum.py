@@ -20,11 +20,13 @@ class StageKey(str, Enum):
     STAGE_7 = "stage_7"
     STAGE_8 = "stage_8"
     STAGE_9 = "stage_9"
+    STAGE_10 = "stage_10"
 
 
 class StageCollect(str, Enum):
     DATASET_COUNT = "dataset_count"
     MODEL_READY = "model_ready"
+    PAGES_BY_ID = "st_pages_by_id"
 
 
 DEFAULT_SESSION_STATE = {
@@ -43,9 +45,11 @@ DEFAULT_SESSION_STATE = {
     StageKey.STAGE_7: False,
     StageKey.STAGE_8: False,
     StageKey.STAGE_9: False,
+    StageKey.STAGE_10: False,
     # Stage Collect
     StageCollect.DATASET_COUNT: 0,
     StageCollect.MODEL_READY: False,
+    StageCollect.PAGES_BY_ID: {},
 }
 
 
@@ -54,9 +58,9 @@ def load_session_state() -> None:
         st.session_state.setdefault(key, value)
 
 
-def get_session_state(key: str | Enum) -> Any:
+def get_session_state(key: str | Enum, default: Any = None) -> Any:
     session_key: str = key.value if isinstance(key, Enum) else key
-    return st.session_state.get(session_key)
+    return st.session_state.get(session_key, default)
 
 
 def set_session_state(key: str | Enum, value: Any) -> None:
@@ -64,6 +68,22 @@ def set_session_state(key: str | Enum, value: Any) -> None:
     st.session_state[session_key] = value
 
 
+def pop_session_state(key: str | Enum, default: Any) -> None:
+    session_key = key.value if isinstance(key, Enum) else key
+    st.session_state.pop(session_key, default)
+
+
 def del_session_state(key: str | Enum) -> None:
     session_key = key.value if isinstance(key, Enum) else key
     del st.session_state[session_key]
+
+
+def switch_to_page(page_id: str) -> str | None:
+    pages_by_id = get_session_state(StageCollect.PAGES_BY_ID, {})
+    target = pages_by_id.get(page_id)
+
+    if target is not None:
+        st.switch_page(target)
+        return None
+
+    return f"Halaman dengan page_id `{page_id}` tidak ditemukan."

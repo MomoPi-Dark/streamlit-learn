@@ -38,8 +38,8 @@ def _load_train_data():
 
 
 @Options(
-    page_name="training",
-    menu_name="Training Model",
+    page_id="naifbayes",
+    menu_name="Training Naive Bayes Model",
     menu_icon="🤖",
     category="modeling",
 )
@@ -79,9 +79,6 @@ class AppPage(BasePage):
         st.markdown("---")
 
         if warning:
-            st.error(
-                "🚫 Data belum siap. Selesaikan persyaratan di atas terlebih dahulu sebelum melanjutkan ke Smoote."
-            )
             st.stop()
 
         if MODEL_PATH.exists():
@@ -231,7 +228,7 @@ Akurasi Train  : {train_accuracy * 100:.2f}%
         status.info("Mempersiapkan model...")
         progress.progress(0.3)
 
-        model = MultinomialNB()
+        model = MultinomialNB(alpha=alpha)
 
         status.info("Melatih model Naive Bayes...")
         progress.progress(0.6)

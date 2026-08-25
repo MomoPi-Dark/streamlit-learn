@@ -29,7 +29,7 @@ COLORMAP_DICT = {
 
 
 @Options(
-    page_name="visualization",
+    page_id="visualisasi",
     menu_name="Visualisasi",
     menu_icon="🖼️",
     category="training",
@@ -136,11 +136,8 @@ class AppPage(BasePage):
 
         st.markdown("---")
 
-        with st.expander("🔄 Buat Ulang Visualisasi"):
-            st.warning(
-                "Gambar yang ada akan ditimpa apabila proses dijalankan kembali."
-            )
-            self._render_visualization(force=True)
+        st.warning("Gambar yang ada akan ditimpa apabila proses dijalankan kembali.")
+        self._render_visualization(force=True)
 
     def _render_visualization(self, force: bool = False) -> None:
         st.markdown("---")

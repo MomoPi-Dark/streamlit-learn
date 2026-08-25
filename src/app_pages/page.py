@@ -126,7 +126,7 @@ def _render_results_summary() -> None:
         )
 
 
-@Options(page_name="overview", menu_name="Overview", menu_icon="🏠")
+@Options(page_id="overview", menu_name="Overview", menu_icon="🏠")
 class AppPage(BasePage):
     def run(self) -> None:
         render_status_badges()

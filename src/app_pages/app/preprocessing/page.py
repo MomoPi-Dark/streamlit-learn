@@ -1,12 +1,10 @@
 import streamlit as st
 import pandas as pd
-import re
-import html
 import threading
 import time
+import html
 from collections import deque
 from datetime import datetime
-from functools import lru_cache
 
 from lib.paths import (
     ULASAN_LABELED_CSV_PATH,
@@ -20,34 +18,16 @@ from lib.enum import (
     set_session_state,
 )
 from structures.base import BasePage, Options
-from stopwords import index
-
-from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
-from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
-from Sastrawi.Dictionary.ArrayDictionary import ArrayDictionary
-from Sastrawi.StopWordRemover.StopWordRemover import StopWordRemover
 
 from lib.bgManager import background_manager
 from lib.running_badge import render_status_badges
-
-RE_URL = re.compile(r"http\S+|www\S+")
-RE_MENTION_HASHTAG = re.compile(r"@\w+|#\w+")
-RE_EMOJI = re.compile(
-    r"[\U0001F600-\U0001F64F"  # emoticon
-    r"\U0001F300-\U0001F5FF"  # simbol & piktograf
-    r"\U0001F680-\U0001F6FF"  # transportasi & simbol map
-    r"\U0001F1E0-\U0001F1FF"  # bendera
-    r"\U00002700-\U000027BF"  # dingbats
-    r"\U0001F900-\U0001F9FF"  # supplemental symbols & pictographs
-    r"\U00002600-\U000026FF"  # misc symbols
-    r"\U0001FA70-\U0001FAFF"  # symbols & pictographs extended-A
-    r"\U00002500-\U00002BEF"  # various symbols
-    r"]+"
+from lib.ui_helpers import alert_with_action
+from lib.slang import load_unified_slang_dict
+from lib.nlp import (
+    clean_text_base,
+    get_stopword_remover,
+    stem_word_cached,
 )
-RE_NON_WORD = re.compile(r"[^\w\s]")
-RE_MULTISPACE = re.compile(r"\s+")
-RE_DIGIT = re.compile(r"\d+")
-RE_REPEAT_CHAR = re.compile(r"(.)\1{2,}")  # 3+ huruf sama berturut-turut
 
 REQUIRED_COLUMNS = [
     "username",
@@ -58,130 +38,7 @@ REQUIRED_COLUMNS = [
 
 required_columns = set(REQUIRED_COLUMNS)
 
-# ===== Objek berat di-init sekali di module level =====
-_stopword_factory = StopWordRemoverFactory()
-_stopwords = sorted(
-    set(_stopword_factory.get_stop_words())
-    # | set(index.load_stopwords())
-    # | set({"nya", "di", "bugil"})
-)
-_dictionary = ArrayDictionary(_stopwords)
-_stopword_remover = StopWordRemover(_dictionary)
-_stemmer = StemmerFactory().create_stemmer()
-
-
-@lru_cache(maxsize=50_000)
-def _stem_word_cached(word: str) -> str:
-    return _stemmer.stem(word)
-
-
-slang_dict = {
-    # # Negara
-    # "indo": "indonesia",
-    # "cn": "china",
-    # Negasi
-    "gak": "tidak",
-    "ga": "tidak",
-    "gk": "tidak",
-    "tdk": "tidak",
-    "nggak": "tidak",
-    "ngga": "tidak",
-    "kagak": "tidak",
-    "gabisa": "tidak bisa",
-    "gaada": "tidak ada",
-    "gajelas": "tidak jelas",
-    "gamau": "tidak mau",
-    # Partikel & kata sambung umum
-    "ckp": "cukup",
-    "bgt": "banget",
-    "yg": "yang",
-    "utk": "untuk",
-    "tlg": "tolong",
-    "dr": "dari",
-    "jd": "jadi",
-    "jgn": "jangan",
-    "udh": "sudah",
-    "udah": "sudah",
-    "blm": "belum",
-    "sm": "sama",
-    "sy": "saya",
-    "aja": "saja",
-    "dgn": "dengan",
-    "tp": "tapi",
-    "gmn": "bagaimana",
-    "gimana": "bagaimana",
-    "pgn": "pengen",
-    "pengen": "ingin",
-    "mksd": "maksud",
-    "mksdnya": "maksudnya",
-    "jg": "juga",
-    "krn": "karena",
-    "knp": "kenapa",
-    "klo": "kalau",
-    "kalo": "kalau",
-    "gtu": "begitu",
-    "gitu": "begitu",
-    "skrg": "sekarang",
-    "skrng": "sekarang",
-    "trs": "terus",
-    "dpt": "dapat",
-    "liat": "lihat",
-    "pake": "pakai",
-    "bikin": "membuat",
-    "nih": "ini",
-    "bnyk": "banyak",
-    "org": "orang",
-    "bs": "bisa",
-    "bsk": "besok",
-    "emg": "memang",
-    "emang": "memang",
-    "pny": "punya",
-    "gpp": "tidak apa-apa",
-    "gapapa": "tidak apa-apa",
-    "bgs": "bagus",
-    "mantul": "mantap betul",
-    "parah": "sangat",
-    "ribet": "rumit",
-    "gw": "saya",
-    "gue": "saya",
-    "lu": "kamu",
-    "lo": "kamu",
-    "sbnrnya": "sebenarnya",
-    "sbnernya": "sebenarnya",
-    "bbrp": "beberapa",
-    "stlh": "setelah",
-    "sblm": "sebelum",
-    "msh": "masih",
-    "trnyt": "ternyata",
-    "wkt": "waktu",
-    # Slang khas review game (relevan buat NTE)
-    "ngelag": "lag",
-    "lagging": "lag",
-    "ngebug": "bug",
-    "ngehang": "macet",
-    "fc": "force close",
-    "maintenance": "pemeliharaan",
-    "dc": "disconnect",
-    "connect": "tersambung",
-    "lemot": "lambat",
-    "berat": "lambat",
-    "crash": "berhenti mendadak",
-    "restart": "mulai ulang",
-    "gacha": "gacha",
-    "p2w": "pay to win",
-    "f2p": "free to play",
-    "op": "overpowered",
-    "nerf": "pelemahan",
-    "buff": "penguatan",
-    "event": "acara",
-    "update": "pembaruan",
-    "maintenence": "pemeliharaan",
-    "sultan": "pemain berdompet tebal",
-    "noob": "pemain baru",
-    "cheat": "kecurangan",
-    "glitch": "bug",
-    "respawn": "muncul ulang",
-}
+_stopword_remover = get_stopword_remover()
 
 
 STEP_WEIGHTS = {
@@ -320,7 +177,7 @@ def _render_live_table_html(rows: list[dict], current_step: str) -> str:
 
 
 @Options(
-    page_name="preprocessing",
+    page_id="preprocessing",
     menu_name="Preprocessing Data",
     menu_icon="🏷️",
     category="preprocessing",
@@ -368,7 +225,7 @@ class AppPage(BasePage):
 
         if warning:
             st.warning(
-                "### ⚠️ Persyaratan belum terpenuhi untuk Preprocessing\n\n"
+                "#### ⚠️ Persyaratan belum terpenuhi untuk Preprocessing\n\n"
                 + "\n".join(f"- {msg}" for msg in warning)
             )
 
@@ -503,7 +360,6 @@ class AppPage(BasePage):
                 ):
                     st.rerun(scope="app")
             else:
-                # status "starting" yang belum sempat ke-update, coba lagi sebentar
                 st.rerun(scope="app")
             return
 
@@ -639,6 +495,10 @@ class AppPage(BasePage):
                 after_val = func(before_val)
                 df.at[idx, output_col] = after_val
 
+                # Pastikan indeks yang ke-update di pipeline record sesuai
+                if idx in sample_idx_list:
+                    pipeline_records[idx][label] = _format_sample_value(after_val)
+
                 live_buffer.append(
                     {
                         "before": _format_sample_value(before_val),
@@ -646,10 +506,10 @@ class AppPage(BasePage):
                     }
                 )
 
-                if row_i % update_every == 0 or row_i == total_rows:
-                    step_progress = row_i / max(total_rows, 1)
+                if row_i % update_every == 0 or row_i == total_rows - 1:
+                    step_progress = (row_i + 1) / max(total_rows, 1)
                     overall = (
-                        (completed_weight + step_weight * step_progress)
+                        (completed_weight + (step_weight * (row_i + 1)))
                         / total_weight
                         * 100
                     )
@@ -659,19 +519,14 @@ class AppPage(BasePage):
                         current_step=label,
                         step_index=step_i,
                         total_steps=total_steps,
-                        row_index=row_i,
+                        row_index=row_i + 1,
                         total_rows=total_rows,
                         percent=round(min(overall, 99.9), 1),
                         sample_rows=list(live_buffer),
+                        pipeline_sample=_build_pipeline_sample(),
                     )
 
             completed_weight += step_weight * total_rows
-
-            # if label == "Stemming":
-            #     df.dropna(subset=[output_col], inplace=True)
-            #     df = df[df[output_col].astype(str).str.strip() != ""].copy()
-            #     # baris contoh yang ikut terbuang saat Stemming dihapus dari pelacakan
-            #     sample_idx_list = [idx for idx in sample_idx_list if idx in df.index]
 
             for idx in sample_idx_list:
                 pipeline_records[idx][label] = _format_sample_value(
@@ -706,54 +561,17 @@ class AppPage(BasePage):
     def _cleaning(self, text: str) -> str:
         """Menghapus URL, mention/hashtag, emoji, angka, tanda baca,
         dan huruf berulang berlebihan (misal 'gilaaaa' -> 'gila')."""
-        text = RE_URL.sub("", text)
-        text = RE_MENTION_HASHTAG.sub("", text)
-        text = RE_EMOJI.sub("", text)
-        text = RE_DIGIT.sub("", text)
-        text = RE_NON_WORD.sub("", text)
-        text = RE_REPEAT_CHAR.sub(
-            r"\1", text
-        )  # <-- tambahan: aaaa -> a, bagusss -> bagus
-        text = RE_MULTISPACE.sub(" ", text).strip()
-        return text
-
-    @lru_cache(maxsize=1)
-    def _load_slang_dictionary(self) -> dict[str, str]:
-        try:
-            df = pd.read_csv(SLANG_CSV_PATH)
-            df.columns = df.columns.str.strip().str.lower()
-
-            if {"slang", "formal"}.issubset(df.columns):
-                slang_ext = dict(
-                    zip(
-                        df["slang"].astype(str).str.strip(),
-                        df["formal"].astype(str).str.strip(),
-                    )
-                )
-            else:
-                df = pd.read_csv(SLANG_CSV_PATH, header=None)
-                slang_ext = dict(
-                    zip(
-                        df[0].astype(str).str.strip(),
-                        df[1].astype(str).str.strip(),
-                    )
-                )
-
-            slang_ext.update(slang_dict)
-            return slang_ext
-
-        except Exception:
-            return slang_dict
+        return clean_text_base(text)
 
     def _normalisasi(self, text: str) -> str:
-        slang_dict = self._load_slang_dictionary()
+        slang_dict = load_unified_slang_dict()
         return " ".join(slang_dict.get(w, w) for w in text.split())
 
     def _remove_stopword(self, text: str) -> str:
         return _stopword_remover.remove(text)
 
     def _stemming(self, text: str) -> str:
-        return " ".join(_stem_word_cached(w) for w in text.split())
+        return " ".join(stem_word_cached(w) for w in text.split())
 
     def _tokenize(self, text: str) -> list[str]:
         return [t for t in text.split() if len(t) > 2]

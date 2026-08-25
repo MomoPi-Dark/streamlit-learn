@@ -11,19 +11,23 @@ from lib.translate import detect_lang, translate_series
 from structures.base import BasePage, Options
 from lib.enum import set_session_state, get_session_state
 from lib.paths import SLANG_CSV_PATH
+from lib.ui_helpers import alert_with_action
 
 APP_ID = "com.hottagames.nte"
 CONTENT_COLUMN = "content"
 
 
 @Options(
-    page_name="dataset",
+    page_id="dataset",
     menu_name="Dataset",
     menu_icon="📥",
     category="dataset",
     requires_model=False,
 )
 class AppPage(BasePage):
+    key_scraping = "scraping"
+    key_upload = "upload"
+
     def on_start(self) -> None:
         set_session_state(StageKey.STAGE_1_DATASET, False)
 
@@ -49,21 +53,35 @@ class AppPage(BasePage):
 
             - Mengambil atau mengunggah dataset ulasan Google Play Store.
             - Memastikan format dataset sesuai dengan kebutuhan aplikasi.
-            - Jika valid, status **Dataset** akan berubah menjadi **Selesai (✓)** dan tahap berikutnya dapat dijalankan.
             """)
 
         st.markdown("---")
+
+        if not SLANG_CSV_PATH.exists():
+            alert_with_action(
+                title="Warning",
+                description="Kamus slang belum tersedia.",
+                button_label="Buka Halaman Kamus Slang",
+                button_icon="➡️",
+                variant="warning",
+                on_click=lambda: self.switch_page("slang"),
+                key="slang-missing",
+            )
 
         if warning:
             st.error("Belum ada dataset tersimpan.")
             st.markdown("---")
 
-            self._render_upload_dataset(force=True)
+            self._render_upload_dataset(force=False, defaultExpanded=True)
             self._render_scrape_form(force=False)
         else:
             self._render_existing_dataset()
 
     def _render_existing_dataset(self) -> None:
+        is_processing = self.status_process_state(
+            self.key_scraping
+        ) or self.status_process_state(self.key_upload)
+
         df_existing = pd.read_csv(ULASAN_RAW_CSV_PATH)
 
         st.success("✅ Dataset sudah ada.")
@@ -88,15 +106,22 @@ class AppPage(BasePage):
             file_name=ULASAN_RAW_CSV_PATH.name,
             mime="text/csv",
             width="stretch",
+            disabled=is_processing,
         )
 
         st.markdown("---")
 
-        self._render_upload_dataset(force=True)
+        self._render_upload_dataset(force=True, defaultExpanded=True)
         self._render_scrape_form(force=True)
 
     def _render_scrape_form(self, force: bool) -> None:
-        with st.expander("🔄 Scraping Ulang (timpa data lama)"):
+        scraping_active = self.status_process_state(self.key_scraping)
+        upload_active = self.status_process_state(self.key_upload)
+        is_busy = scraping_active or upload_active
+
+        with st.expander(
+            label="🔄 Scraping Ulang (timpa data lama)", expanded=scraping_active
+        ):
             if force:
                 st.warning(
                     "Data lama akan tertimpa jika melakukan scraping ulang. "
@@ -104,13 +129,17 @@ class AppPage(BasePage):
                     "yang sudah ada juga akan **dihapus** karena tidak lagi sesuai dengan dataset baru."
                 )
 
+            if upload_active:
+                st.info("⏳ Upload sedang berjalan. Upload dinonaktifkan sementara.")
+                return
+
             count = st.number_input(
                 "Jumlah ulasan yang diambil",
                 min_value=100,
-                max_value=10000,
                 value=4200,
                 step=100,
                 key=f"count_{force}",
+                disabled=is_busy,
             )
 
             max_retries = st.number_input(
@@ -119,12 +148,14 @@ class AppPage(BasePage):
                 max_value=10,
                 value=5,
                 key=f"retries_{force}",
+                disabled=is_busy,
             )
 
             use_date_filter = st.checkbox(
                 "Gunakan filter tanggal",
                 value=False,
                 key=f"use_date_filter_{force}",
+                disabled=is_busy,
             )
 
             start_date = None
@@ -139,6 +170,7 @@ class AppPage(BasePage):
                             "Tanggal awal",
                             value=datetime.now().date() - pd.Timedelta(days=30),
                             key=f"start_date_{force}",
+                            disabled=is_busy,
                         )
 
                     with col_end:
@@ -146,6 +178,7 @@ class AppPage(BasePage):
                             "Tanggal akhir",
                             value=datetime.now().date(),
                             key=f"end_date_{force}",
+                            disabled=is_busy,
                         )
 
                     if start_date > end_date:
@@ -158,6 +191,7 @@ class AppPage(BasePage):
                 "🌐 Translate ulasan berbahasa Inggris ke Indonesia",
                 value=False,
                 key=f"translate_scrape_{force}",
+                disabled=is_busy,
                 help=(
                     "Mendeteksi ulasan yang tertulis dalam Bahasa Inggris lalu "
                     "menerjemahkannya ke Bahasa Indonesia agar konsisten dengan "
@@ -172,7 +206,12 @@ class AppPage(BasePage):
                 type="primary",
                 width="stretch",
                 key=f"scrape_btn_{force}",
+                disabled=is_busy,
             ):
+                self.start_process_state(self.key_scraping)
+                st.rerun()
+
+            if scraping_active:
                 progress_bar = st.progress(0.0)
                 status_text = st.empty()
 
@@ -195,6 +234,8 @@ class AppPage(BasePage):
                         "Gagal mengambil data. "
                         "Coba lagi, periksa koneksi, atau perlebar rentang tanggal."
                     )
+                    self.stop_process_state(self.key_scraping)
+                    st.rerun()
                     return
 
                 if translate_scrape:
@@ -205,16 +246,12 @@ class AppPage(BasePage):
                 CSV_DIR.mkdir(parents=True, exist_ok=True)
                 df_raw.to_csv(ULASAN_RAW_CSV_PATH, index=False)
 
-                # Dataset mentah berubah -> semua hasil olahan lama (labeling,
-                # preprocessing, TF-IDF, split) sudah tidak valid dan harus dihapus.
                 clear_downstream_artifacts()
 
-                st.success(f"✅ Berhasil mengumpulkan {len(df_raw)} ulasan.")
+                self.stop_process_state(self.key_scraping)
 
-                st.dataframe(
-                    df_raw[REQUIRED_COLUMNS],
-                    width="stretch",
-                )
+                st.success(f"✅ Berhasil mengumpulkan {len(df_raw)} ulasan.")
+                st.dataframe(df_raw[REQUIRED_COLUMNS], width="stretch")
 
                 st.download_button(
                     label="⬇️ Download CSV",
@@ -227,8 +264,15 @@ class AppPage(BasePage):
 
                 st.rerun()
 
-    def _render_upload_dataset(self, force: bool) -> None:
-        with st.expander("📤 Upload Dataset"):
+    def _render_upload_dataset(self, force: bool, defaultExpanded=False) -> None:
+        upload_active = self.status_process_state(self.key_upload)
+        scraping_active = self.status_process_state(self.key_scraping)
+        pending_key = f"{self.key_upload}_pending"
+        pending = get_session_state(pending_key, None)
+
+        with st.expander(
+            label="📤 Upload Dataset", expanded=upload_active or defaultExpanded
+        ):
             if force:
                 st.warning(
                     "Data lama akan tertimpa jika mengunggah dataset baru. "
@@ -236,103 +280,143 @@ class AppPage(BasePage):
                     "yang sudah ada juga akan **dihapus** karena tidak lagi sesuai dengan dataset baru."
                 )
 
-            df = None
-
-            uploaded_file = st.file_uploader(
-                "Pilih file CSV",
-                type=["csv"],
-                help=f"Kolom wajib: {', '.join(REQUIRED_COLUMNS)}",
-                key=f"upload_csv_{get_session_state(StateKey.UPLOAD_KEY)}",
-            )
-
-            if uploaded_file is not None:
-                try:
-                    df = pd.read_csv(uploaded_file)
-                except Exception as e:
-                    st.error(f"Gagal membaca file CSV.\n\n{e}")
-                    return
-
-                missing_columns = set(REQUIRED_COLUMNS) - set(df.columns)
-
-                if missing_columns:
-                    st.error(
-                        "❌ Format dataset tidak sesuai.\n\n"
-                        f"Kolom yang wajib ada:\n"
-                        f"{', '.join(REQUIRED_COLUMNS)}\n\n"
-                        f"Kolom yang hilang:\n"
-                        f"{', '.join(sorted(missing_columns))}"
-                    )
-                    return
-
-                df = df[REQUIRED_COLUMNS]
-
-                if df.empty:
-                    st.error("Dataset tidak memiliki data.")
-                    return
-
-                try:
-                    df["at"] = pd.to_datetime(df["at"])
-                except Exception:
-                    st.error("Kolom 'at' harus berupa tanggal yang valid.")
-                    return
-
-                st.success(f"✅ Dataset valid ({len(df)} data)")
-
-                # ===== Deteksi bahasa dataset (sample) untuk kasih rekomendasi =====
-                sample = df[CONTENT_COLUMN].dropna().astype(str).head(20).tolist()
-                detected_langs = [detect_lang(t) for t in sample if t.strip()]
-                en_ratio = (
-                    detected_langs.count("en") / len(detected_langs)
-                    if detected_langs
-                    else 0
-                )
-
-                if en_ratio >= 0.5:
+            if upload_active or pending is not None:
+                if pending is None:
                     st.warning(
-                        f"🌐 Terdeteksi ±{en_ratio * 100:.0f}% ulasan (sampel) berbahasa "
-                        "Inggris. Disarankan aktifkan opsi translate di bawah agar "
-                        "konsisten dengan pipeline preprocessing (Sastrawi)."
+                        "Status upload sedang aktif, tetapi data proses tidak ditemukan."
                     )
+                    if st.button(
+                        "⏹️ Reset Proses Upload",
+                        key="reset_upload_missing_payload",
+                        width="stretch",
+                    ):
+                        self.stop_process_state(self.key_upload)
+                        st.rerun()
+                    return
 
-                st.dataframe(df, width="stretch")
+                df = pending["df"]
+                translate_upload = pending["translate"]
+                stage = pending["stage"]
 
-            translate_upload = st.checkbox(
-                "🌐 Translate ulasan berbahasa Inggris ke Indonesia",
-                value=False,
-                key=f"translate_upload_{force}",
-                help=(
-                    "Mendeteksi ulasan yang tertulis dalam Bahasa Inggris lalu "
-                    "menerjemahkannya ke Bahasa Indonesia sebelum disimpan."
-                ),
-            )
+                if stage == "upload":
+                    st.info("⏳ Sedang menyimpan dataset, mohon tunggu...")
+                    CSV_DIR.mkdir(parents=True, exist_ok=True)
+                    df.to_csv(ULASAN_RAW_CSV_PATH, index=False)
+                    clear_downstream_artifacts()
 
-            with st.form("upload_dataset_form", clear_on_submit=True):
+                    if translate_upload:
+                        set_session_state(
+                            pending_key,
+                            {"df": df, "translate": True, "stage": "translate"},
+                        )
+                        st.rerun()
+                        return
+
+                if stage == "translate":
+                    st.info("⏳ Sedang memproses dataset, mohon tunggu...")
+                    st.caption(
+                        "🌐 Menerjemahkan ulasan berbahasa Inggris ke Bahasa Indonesia"
+                    )
+                    progress_bar = st.progress(0.0)
+                    status_text = st.empty()
+                    df = self._translate_dataframe(df, progress_bar, status_text)
+                    df.to_csv(ULASAN_RAW_CSV_PATH, index=False)
+
+                st.success("✅ Dataset berhasil disimpan.")
+                set_session_state(pending_key, None)
+                self.stop_process_state(self.key_upload)
+                st.rerun()
+                return
+
+            if scraping_active:
+                st.info("⏳ Scraping sedang berjalan. Upload dinonaktifkan sementara.")
+                return
+
+            with st.form(key=f"upload_form_{force}", border=False):
+                df, error = self._display_select_file()
+                translate_upload = st.checkbox(
+                    "🌐 Translate ulasan berbahasa Inggris ke Indonesia",
+                    value=False,
+                    help=(
+                        "Mendeteksi ulasan yang tertulis dalam Bahasa Inggris "
+                        "lalu menerjemahkannya ke Bahasa Indonesia sebelum disimpan."
+                    ),
+                )
                 submit = st.form_submit_button(
-                    "💾 Gunakan Dataset Ini",
+                    "💾 Mulai Upload Dataset",
                     type="primary",
                     width="stretch",
                 )
 
+            if error is not None:
+                st.error(error)
+                return
+
             if submit:
-                if df is None:
-                    st.error("Silakan pilih file CSV terlebih dahulu.")
-                    return
+                set_session_state(
+                    pending_key,
+                    {"df": df, "translate": translate_upload, "stage": "upload"},
+                )
+                self.start_process_state(self.key_upload)
 
-                if translate_upload:
-                    progress_bar = st.progress(0.0)
-                    status_text = st.empty()
-                    df = self._translate_dataframe(df, progress_bar, status_text)
-
-                CSV_DIR.mkdir(parents=True, exist_ok=True)
-                df.to_csv(ULASAN_RAW_CSV_PATH, index=False)
-
-                clear_downstream_artifacts()
-
-                st.success("✅ Dataset berhasil disimpan.")
-
-                # st.session_state[StateKey.UPLOAD_KEY] += 1
-                set_session_state(StateKey.UPLOAD_KEY, +1)
+                upload_key = get_session_state(StateKey.UPLOAD_KEY, 0)
+                set_session_state(StateKey.UPLOAD_KEY, upload_key + 1)
                 st.rerun()
+
+    def _display_select_file(
+        self,
+    ) -> tuple[pd.DataFrame | None, str | None]:
+        upload_key = get_session_state(StateKey.UPLOAD_KEY, 0)
+        uploaded_file = st.file_uploader(
+            "Pilih file CSV",
+            type=["csv"],
+            help=f"Kolom wajib: {', '.join(REQUIRED_COLUMNS)}",
+            key=f"upload_csv_{upload_key}",
+        )
+
+        if uploaded_file is None:
+            return None, None
+
+        try:
+            data_frame = pd.read_csv(uploaded_file)
+        except Exception as e:
+            return None, f"Gagal membaca file CSV.\n\n{e}"
+
+        missing_columns = set(REQUIRED_COLUMNS) - set(data_frame.columns)
+        if missing_columns:
+            return None, (
+                "❌ Format dataset tidak sesuai.\n\n"
+                f"Kolom yang wajib ada:\n{', '.join(REQUIRED_COLUMNS)}\n\n"
+                f"Kolom yang hilang:\n{', '.join(sorted(missing_columns))}"
+            )
+
+        data_frame = data_frame[REQUIRED_COLUMNS]
+        if data_frame.empty:
+            return None, "Dataset tidak memiliki data."
+
+        try:
+            data_frame["at"] = pd.to_datetime(data_frame["at"])
+        except Exception:
+            return None, "Kolom 'at' harus berupa tanggal yang valid."
+
+        sample = data_frame[CONTENT_COLUMN].dropna().astype(str).head(20).tolist()
+        detected_langs = [detect_lang(t) for t in sample if t.strip()]
+        en_ratio = (
+            detected_langs.count("en") / len(detected_langs) if detected_langs else 0
+        )
+
+        if en_ratio >= 0.5:
+            st.warning(
+                f"🌐 Terdeteksi ±{en_ratio * 100:.0f}% "
+                "ulasan (sampel) berbahasa Inggris. "
+                "Disarankan aktifkan opsi translate di bawah "
+                "agar konsisten dengan pipeline preprocessing "
+                "(Sastrawi)."
+            )
+
+        st.success(f"✅ Dataset valid ({len(data_frame)} data)")
+        st.dataframe(data_frame, width="stretch")
+        return data_frame, None
 
     @staticmethod
     def _translate_dataframe(
@@ -352,10 +436,11 @@ class AppPage(BasePage):
 
         translated_series, stats = translate_series(
             df[CONTENT_COLUMN],
-            source="en",
+            source="auto",
             target="id",
             only_detected_source=True,
             progress_callback=on_progress,
+            delay=1,
         )
 
         df = df.copy()
@@ -454,6 +539,8 @@ class AppPage(BasePage):
 
         if not ULASAN_RAW_CSV_PATH.exists():
             warnings.append("📄 Dataset belum tersedia.")
+
+        if warnings:
             return warnings
 
         try:

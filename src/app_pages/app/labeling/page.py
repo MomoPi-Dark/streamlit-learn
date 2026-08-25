@@ -14,7 +14,7 @@ from structures.base import BasePage, Options
 
 
 @Options(
-    page_name="labeling",
+    page_id="labeling",
     menu_name="Labeling Data",
     menu_icon="🏷️",
     category="labeling",
@@ -72,6 +72,8 @@ class AppPage(BasePage):
             self._render_labeling()
 
     def _render_existing_dataset(self) -> None:
+        is_processing = self.status_process_state()
+
         df = pd.read_csv(ULASAN_LABELED_CSV_PATH)
 
         st.success("✅ Dataset berlabel sudah tersedia.")
@@ -106,15 +108,17 @@ class AppPage(BasePage):
             file_name=ULASAN_LABELED_CSV_PATH.name,
             mime="text/csv",
             width="stretch",
+            disabled=self.status_process_state(),
         )
 
         st.markdown("---")
 
-        with st.expander("🔄 Pelabelan Ulang"):
+        with st.expander(label="🔄 Pelabelan Ulang", expanded=is_processing):
             self._render_labeling()
 
     def _render_labeling(self) -> None:
         warning = self._validate_requirements()
+        is_processing = self.status_process_state()
 
         df_raw = pd.read_csv(ULASAN_RAW_CSV_PATH)
 
@@ -138,20 +142,27 @@ class AppPage(BasePage):
             "🏷️ Mulai Pelabelan",
             type="primary",
             width="stretch",
-            disabled=bool(warning),
+            disabled=bool(warning) or is_processing,
         ):
-            df = self._label_dataset(df_raw)
+            self.start_process_state()
+            st.rerun()
 
-            CSV_DIR.mkdir(parents=True, exist_ok=True)
+        if is_processing:
+            with st.spinner("Melabeli dataset..."):
+                df = self._label_dataset(df_raw)
 
-            df.to_csv(
-                ULASAN_LABELED_CSV_PATH,
-                index=False,
-            )
+                CSV_DIR.mkdir(parents=True, exist_ok=True)
+
+                df.to_csv(
+                    ULASAN_LABELED_CSV_PATH,
+                    index=False,
+                )
+
+            self.stop_process_state()
 
             st.success("✅ Dataset berhasil dilabeli.")
 
-            st.rerun()
+            st.rerun()  # rerun #2 -> tombol balik enabled
 
     def _label_dataset(self, df_raw: pd.DataFrame) -> pd.DataFrame:
         df = df_raw.copy()

@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from structures.base import BasePage
 import importlib.util
+import streamlit as st
+from lib.enum import StageCollect, get_session_state, set_session_state
 
 
 def slugify(text: str) -> str:
@@ -90,6 +92,7 @@ class PageLoader:
                 ):
                     obj.__page_file__ = file_path
                     obj.__style_file__ = style_by_dir.get(os.path.dirname(file_path))
+                    obj.__page_url__ = "/" + PageLoader.build_url_path(obj).lstrip("/")
 
                     page_classes.append(obj)
 
@@ -106,7 +109,9 @@ class PageLoader:
         return pages
 
     @staticmethod
-    def build_url_path(page: BasePage, defaultBasedir="src/app_pages") -> str:
+    def build_url_path(
+        page: BasePage | type[BasePage], defaultBasedir="src/app_pages"
+    ) -> str:
         file_path = getattr(page, "__page_file__", None)
 
         if file_path is None:
@@ -125,9 +130,4 @@ class PageLoader:
         if parts[-1] == "page":
             parts.pop()
 
-        # Streamlit's st.Page(url_path=...) TIDAK mengizinkan slash di sini
-        # (StreamlitAPIException: "URL path cannot contain a nested path").
-        # url_path harus flat single-segment; struktur "/app/xxx" yang muncul
-        # di browser datang dari section/grouping di st.navigation(), bukan
-        # dari string ini.
         return "-".join(part.lower().replace("_", "-") for part in parts)

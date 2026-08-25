@@ -18,15 +18,13 @@ from lib.paths import (
 
 
 @Options(
-    page_name="smote",
+    page_id="smoote",
     menu_name="Penyeimbangan Kelas (SMOTE)",
     menu_icon="⚖️",
     category="modeling",
 )
 class AppPage(BasePage):
     def on_start(self) -> None:
-        # STAGE_6 = True hanya jika hasil resampling benar-benar sudah
-        # tersimpan di disk — bukan sekadar prasyarat terpenuhi.
         is_completed = (
             X_TRAIN_RESAMPLED_PATH.exists() and Y_TRAIN_RESAMPLED_PATH.exists()
         )
@@ -77,6 +75,8 @@ class AppPage(BasePage):
     # ==========================================================
 
     def _render_existing_resampled(self) -> None:
+        is_proses = self.status_process_state()
+
         X_resampled = sparse.load_npz(X_TRAIN_RESAMPLED_PATH)
         y_resampled = joblib.load(Y_TRAIN_RESAMPLED_PATH)
         y_original = joblib.load(Y_TRAIN_PATH)
@@ -120,13 +120,15 @@ class AppPage(BasePage):
 
         st.markdown("---")
 
-        with st.expander("🔄 Proses Ulang SMOTE"):
+        with st.expander(label="🔄 Proses Ulang SMOTE", expanded=is_proses):
             st.warning(
                 "Hasil resampling yang ada akan ditimpa apabila proses dijalankan kembali."
             )
             self._render_resampling(force=True)
 
     def _render_resampling(self, force: bool = False) -> None:
+        is_processing = self.status_process_state()
+
         if X_TRAIN_PATH.exists() and Y_TRAIN_PATH.exists():
             y_train = joblib.load(Y_TRAIN_PATH)
             st.info(f"Data train siap diproses ({len(y_train):,} data).")
@@ -143,6 +145,7 @@ class AppPage(BasePage):
             max_value=10,
             value=5,
             key=f"k_neighbors_{force}",
+            disabled=is_processing,
             help=(
                 "Jumlah tetangga terdekat yang dipakai SMOTE untuk membuat data sintetis. "
                 "Nilai default (5) adalah nilai standar yang umum dipakai di penelitian."
@@ -155,9 +158,13 @@ class AppPage(BasePage):
             "🚀 Mulai Penyeimbangan SMOTE" if not force else "🔄 Proses Ulang SMOTE",
             type="primary",
             width="stretch",
-            disabled=bool(self._validate_requirements()),
+            disabled=bool(self._validate_requirements()) or is_processing,
             key=f"smote_button_{force}",
         ):
+            self.start_process_state()
+            st.rerun()  # rerun #1 -> render slider & tombol jadi disabled
+
+        if is_processing:
             progress = st.progress(0.0)
             status = st.empty()
 
@@ -175,13 +182,15 @@ class AppPage(BasePage):
             progress.progress(1.0)
             status.success("✅ Penyeimbangan SMOTE selesai.")
 
+            self.stop_process_state()
+
             st.success(f"""
-Jumlah Data Sebelum : {X_resampled.shape[0] - (X_resampled.shape[0] - len(y_resampled)):,}
+    Jumlah Data Sebelum : {X_resampled.shape[0] - (X_resampled.shape[0] - len(y_resampled)):,}
 
-Jumlah Data Sesudah  : {len(y_resampled):,}
-""")
+    Jumlah Data Sesudah  : {len(y_resampled):,}
+    """)
 
-            st.rerun()
+            st.rerun()  # rerun #2 -> slider & tombol balik enabled
 
     # ==========================================================
     # PROCESS
