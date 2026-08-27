@@ -98,7 +98,7 @@ class AppPage(BasePage):
             st.metric("File", ULASAN_LABELED_CSV_PATH.name)
 
         st.dataframe(
-            df[REQUIRED_COLUMNS],
+            df[REQUIRED_COLUMNS + ["sentimen_label"]],
             width="stretch",
         )
 
