@@ -49,8 +49,8 @@ class AppPage(BasePage):
             st.session_state.test_app_id = "com.hottagames.nte"
         if "test_num_reviews" not in st.session_state:
             st.session_state.test_num_reviews = 20
-        if "test_manual_text" not in st.session_state:
-            st.session_state.test_manual_text = ""
+        if "test_manual_text_val" not in st.session_state:
+            st.session_state.test_manual_text_val = ""
         if "test_manual_result" not in st.session_state:
             st.session_state.test_manual_result = None
 
@@ -185,7 +185,7 @@ class AppPage(BasePage):
 
                 for i, row in enumerate(df_scraped.itertuples()):
                     status_text.text(
-                        f"Memproses dan melakukan Preprocessing ulasan {i+1} dari {len(df_scraped)}..."
+                        f"Memproses dan melakukan Preprocessing ulasan {i + 1} dari {len(df_scraped)}..."
                     )
                     progress_bar.progress((i + 1) / len(df_scraped))
 
@@ -253,10 +253,16 @@ class AppPage(BasePage):
         # -------------------------------------------------
         # ✍️ Tab Manual – input komentar sendiri (versi detail)
         with tab_manual:
+            # Proses reset sebelum widget dibuat agar tidak melanggar aturan Streamlit
+            if st.session_state.get("reset_manual"):
+                st.session_state.test_manual_text_val = ""
+                st.session_state.test_manual_result = None
+                st.session_state["reset_manual"] = False
+
             st.subheader("Uji sentimen dari komentar manual")
             comment = st.text_area(
                 "Tulis komentar di sini …",
-                key="test_manual_text",
+                key="test_manual_text_val",
                 height=150,
             )
             trigger_manual = st.button("Proses Komentar", key="btn_manual")
@@ -415,6 +421,5 @@ class AppPage(BasePage):
 
                 # Tombol reset
                 if st.button("🔄 Reset Hasil", key="btn_manual_reset"):
-                    st.session_state.test_manual_result = None
-                    st.session_state.test_manual_text = ""
+                    st.session_state["reset_manual"] = True
                     st.rerun()
