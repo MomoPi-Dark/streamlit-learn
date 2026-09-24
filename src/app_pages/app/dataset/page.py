@@ -298,6 +298,14 @@ class AppPage(BasePage):
                 translate_upload = pending["translate"]
                 stage = pending["stage"]
 
+                if df is None or not isinstance(df, pd.DataFrame):
+                    st.error(
+                        "Data upload tidak ditemukan. Silakan pilih file CSV dan coba lagi."
+                    )
+                    set_session_state(pending_key, None)
+                    self.stop_process_state(self.key_upload)
+                    return
+
                 if stage == "upload":
                     st.info("⏳ Sedang menyimpan dataset, mohon tunggu...")
                     CSV_DIR.mkdir(parents=True, exist_ok=True)
@@ -353,6 +361,10 @@ class AppPage(BasePage):
                 return
 
             if submit:
+                if df is None:
+                    st.error("Silakan pilih file CSV terlebih dahulu.")
+                    return
+
                 set_session_state(
                     pending_key,
                     {"df": df, "translate": translate_upload, "stage": "upload"},

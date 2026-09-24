@@ -15,7 +15,6 @@ from sklearn.metrics import (
     classification_report,
     confusion_matrix,
 )
-
 from structures.base import BasePage, Options
 from lib.enum import StageKey, get_session_state, set_session_state
 from lib.paths import (
